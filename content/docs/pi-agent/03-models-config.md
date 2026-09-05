@@ -75,10 +75,12 @@ Pi Agent 有两级配置：
 }
 ```
 
+> 简单说：`steeringMode` 控制你在 Agent 运行过程中**中途追加的新指令**怎么投递（一条条给，还是攒到一起给），`followUpMode` 则控制**后续补充消息**的投递节奏。日常用默认的 `one-at-a-time` 即可。
+
 | 配置项 | 说明 | 可选值 |
 |--------|------|--------|
-| `steeringMode` | 队列中 steering 消息投递方式 | `one-at-a-time`（默认）/ `all` |
-| `followUpMode` | 队列中 follow-up 消息投递方式 | `one-at-a-time`（默认）/ `all` |
+| `steeringMode` | 运行中追加指令（Steering）的投递方式：一次一条，还是积压后一起给 | `one-at-a-time`（默认）/ `all` |
+| `followUpMode` | 后续补充消息（Follow-up）的投递方式：一次一条，还是积压后一起给 | `one-at-a-time`（默认）/ `all` |
 | `transport` | 多传输供应商的传输偏好 | `sse` / `websocket` / `auto` |
 | `defaultProjectTrust` | 无保存决策时的信任回退 | `ask`（默认）/ `always` / `never` |
 | `enableInstallTelemetry` | 安装/更新遥测开关 | `false` 退出 |
