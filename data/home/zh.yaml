@@ -1,0 +1,37 @@
+# 首页数据。`sections` 决定各区块的出场顺序。
+sections:
+  - hero
+  - cards
+
+hero:
+  eyebrow: 从入门到进阶 · 持续更新
+  title_lines:
+    - 技术学习博客
+    - 一套系统化的教程合集
+  desc: 涵盖主流编程语言、后端框架、工程工具与 AI 编程助手。每个教程都按章节组织，代码示例为主、说明精炼，适合按顺序阅读。
+  actions:
+    - label: 开始学习
+      url: docs/
+      icon: fa-solid fa-book-open
+      style: primary
+
+cards:
+  eyebrow: 教程目录
+  title: 点击卡片，进入对应教程
+  desc: 从四门核心语言到现代工程工具与 AI 编程助手，共 13 套教程。
+  columns: 4
+  link_label: 进入教程
+  items:
+    - { name: Spring 教程, icon: fa-brands fa-java, desc: Java 企业级框架，IoC、AOP、Spring Boot、Spring MVC, url: docs/spring/ }
+    - { name: JavaScript 教程, icon: fa-brands fa-js, desc: 前端核心语言，语法、ES6+、DOM、异步编程, url: docs/javascript/ }
+    - { name: Golang 教程, icon: fa-brands fa-golang, desc: Go 语言，并发、标准库、工程实践, url: docs/golang/ }
+    - { name: Python 教程, icon: fa-brands fa-python, desc: 语法、数据结构与字符串、函数、面向对象与进阶, url: docs/python/ }
+    - { name: FastAPI 教程, icon: fa-solid fa-bolt, desc: 现代 Python Web 框架，类型校验、依赖注入、自动文档, url: docs/fastapi/ }
+    - { name: Node.js 教程, icon: fa-brands fa-node-js, desc: 模块系统、异步编程、核心模块与 Web 开发, url: docs/nodejs/ }
+    - { name: Git 使用教程, icon: fa-brands fa-git-alt, desc: 版本控制，分支、远程协作、历史管理, url: docs/git/ }
+    - { name: Groovy 教程, icon: fa-solid fa-cubes, desc: JVM 动态语言，闭包、元编程、Gradle 与 Jenkins, url: docs/groovy/ }
+    - { name: Nginx 配置教程, icon: fa-solid fa-server, desc: 核心指令、反向代理、负载均衡、性能与安全, url: docs/nginx/ }
+    - { name: Pi Agent 教程, icon: fa-solid fa-terminal, desc: 极简终端 AI 编程 Agent，多模型与扩展, url: docs/pi-agent/ }
+    - { name: Claude Code 教程, icon: fa-solid fa-wand-magic-sparkles, desc: 官方终端编程助手，CLAUDE.md、MCP、Hooks, url: docs/claude-code/ }
+    - { name: OpenCode 教程, icon: fa-solid fa-code, desc: 开源 AI 编程 Agent，终端/桌面/IDE 三形态, url: docs/opencode/ }
+    - { name: DeepSeek Harness 教程, icon: fa-solid fa-puzzle-piece, desc: DeepSeek 开源 Agent 框架，一切皆插件, url: docs/deepseek-harness/ }
