@@ -3,6 +3,9 @@ title: 博客
 linkTitle: 博客
 description: 技术学习博客的文章
 weight: 50
+type: blog
+cascade:
+  type: blog
 ---
 
 # 博客
