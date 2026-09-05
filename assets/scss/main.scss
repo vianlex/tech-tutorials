@@ -1,0 +1,50 @@
+// 站点级样式入口：覆盖主题的 main.scss。
+// Hugo 的 resources.Get 会优先使用站点 assets 下的同名文件，因此本文件
+// 取代主题的 assets/scss/main.scss。先引入主题完整样式，再追加站点自定义。
+@import 'td/main';
+
+// ========== 站点自定义样式 ==========
+// 让首页「教程卡片」整卡可点击（参考主题 .td-landing-logo-card 的
+// 隐形铺满链接技巧），使点击卡片任意位置都能跳转，而非只能点箭头。
+
+.td-landing-card {
+  position: relative;
+
+  // 卡片内的其他链接（若有）保持在链接层之上
+  a:not(.td-landing-card-link) {
+    position: relative;
+    z-index: 1;
+  }
+
+  // 底部箭头链接：用 ::after 铺满整张卡片，成为整卡的点击区域
+  > .td-landing-card-link {
+    &::after {
+      position: absolute;
+      content: '';
+      inset: 0;
+    }
+
+    &:focus-visible {
+      outline: none;
+    }
+  }
+
+  // 整卡 hover 时同步高亮底部链接文字与箭头
+  &:has(> .td-landing-card-link) {
+    &:hover {
+      .td-landing-card-link {
+        color: var(--td-blue-strong);
+
+        i {
+          transform: translateX(3px);
+        }
+      }
+    }
+  }
+
+  // 键盘聚焦时，焦点环描整个卡片而非箭头
+  &:has(> .td-landing-card-link:focus-visible) {
+    outline: 2px solid var(--td-copper);
+    outline-offset: 3px;
+  }
+}

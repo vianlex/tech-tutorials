@@ -17,7 +17,6 @@ hero:
 
 cards:
   eyebrow: 教程目录
-  title: 点击卡片，进入对应教程
   desc: 从四门核心语言到现代工程工具与 AI 编程助手，共 16 套教程。
   columns: 4
   link_label: 进入教程
