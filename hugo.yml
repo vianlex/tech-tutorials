@@ -1,0 +1,65 @@
+# ============================================================
+# 站点身份
+# ============================================================
+title: 技术学习博客
+baseURL: https://amias.icu/
+defaultContentLanguage: zh
+# enableGitInfo: true   # 页面「最后修改」时间来自 git，先 git init 再打开
+
+# ============================================================
+# 语言配置（简体中文为主）
+# ============================================================
+languages:
+  zh:
+    label: 简体中文
+    locale: zh-CN
+    weight: 1
+    title: 技术学习博客
+    params:
+      description: Spring、JavaScript、Golang、Python 从入门到进阶的教程与笔记
+    menus:
+      main:
+        - { name: 教程, pageRef: /docs, weight: 20 }
+        - { name: 博客, pageRef: /blog, weight: 50 }
+
+# ============================================================
+# 三项 Goldmark 前置：OINK 的原生 Markdown 组件全靠它们
+# ============================================================
+markup:
+  goldmark:
+    renderer:
+      unsafe: true # 允许内容里的行内 HTML
+    parser:
+      attribute:
+        block: true # {.steps} {.cards} {caption=} 这类属性行
+      wrapStandAloneImageWithinParagraph: false # 块级图片才能带属性行
+  highlight:
+    noClasses: false # 代码配色跟随深浅色模式
+
+# ============================================================
+# 主题参数
+# ============================================================
+params:
+  offline_search: true
+  github_repo: https://github.com/CHANGE-ME/learn-blog
+  github_branch: main
+  copyright:
+    authors: '技术学习博客'
+    from_year: 2026
+  ui:
+    dark_mode: true
+    sidebar_menu_foldable: true
+    section_index: cards
+
+# ============================================================
+# 输出格式
+# ============================================================
+outputs:
+  home: [HTML, markdown, LLMS]
+  page: [HTML, markdown]
+  section: [HTML, RSS, print, markdown]
+
+# ============================================================
+# 主题引用（离线归档方式）
+# ============================================================
+theme: oink
