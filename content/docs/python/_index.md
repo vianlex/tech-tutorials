@@ -1,7 +1,7 @@
 ---
 title: Python 教程
 linkTitle: Python 教程
-description: Python 3.10+ 从基础语法、数据结构、函数模块到面向对象、异常与进阶实践的系统教程
+description: Python 3.10+ 从基础语法、数据结构、函数模块、面向对象、异常、类型标注到异步编程的系统教程
 weight: 40
 ---
 
@@ -16,3 +16,5 @@ Python 是一门简洁优雅的解释型语言，广泛应用于 Web 开发、�
 - [第三章：函数与模块](/docs/python/03-functions-modules/) — 函数定义、参数、作用域、lambda、模块与包
 - [第四章：面向对象与异常](/docs/python/04-oop-exceptions/) — 类与继承、特殊方法、异常处理与文件读写
 - [第五章：进阶与最佳实践](/docs/python/05-advanced/) — 推导式、生成器、装饰器、标准库与 Pythonic 实践
+- [第六章：类型标注](/docs/python/06-type-hints/) — 类型标注基础、typing 模块、泛型与运行时校验
+- [第七章：异步编程](/docs/python/07-async/) — async/await 协程、并发爬取与常见坑
