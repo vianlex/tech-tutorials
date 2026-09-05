@@ -1,8 +1,7 @@
 name: Deploy to Cloudflare Pages
 
+# 已改用 Cloudflare Dashboard Git 集成自动部署，此工作流仅保留手动触发备用
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
