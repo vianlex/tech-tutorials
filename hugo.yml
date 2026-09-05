@@ -16,7 +16,7 @@ languages:
     weight: 1
     title: 技术学习博客
     params:
-      description: Spring、JavaScript、Golang、Python 从入门到进阶的教程与笔记
+      description: Spring、JavaScript、Golang、Python、Node.js、Groovy、Nginx 及 AI 编程工具（Pi Agent、Claude Code）从入门到进阶的教程与笔记
     menus:
       main:
         - { name: 教程, pageRef: /docs, weight: 20 }
