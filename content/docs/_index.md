@@ -23,4 +23,6 @@ weight: 20
 - [DeepSeek Harness 使用教程](/docs/deepseek-harness/)
 - [Groovy 教程](/docs/groovy/)
 - [Nginx 配置教程](/docs/nginx/)
+- [sed 使用教程](/docs/sed/)
+- [awk 使用教程](/docs/awk/)
 {{% /cards %}}
