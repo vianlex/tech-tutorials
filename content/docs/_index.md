@@ -20,6 +20,7 @@ weight: 20
 - [Pi Agent 使用教程](/docs/pi-agent/)
 - [Claude Code 使用教程](/docs/claude-code/)
 - [OpenCode 使用教程](/docs/opencode/)
+- [DeepSeek Harness 使用教程](/docs/deepseek-harness/)
 - [Groovy 教程](/docs/groovy/)
 - [Nginx 配置教程](/docs/nginx/)
 {{% /cards %}}
