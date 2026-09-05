@@ -12,6 +12,7 @@ weight: 20
 {{% cards %}}
 - [Spring 教程](/docs/spring/)
 - [JavaScript 教程](/docs/javascript/)
+- [React 教程](/docs/react/)
 - [Golang 教程](/docs/golang/)
 - [Python 教程](/docs/python/)
 - [Uv 教程](/docs/uv/)
