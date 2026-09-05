@@ -41,7 +41,7 @@ markup:
 # ============================================================
 params:
   offline_search: true
-  github_repo: https://github.com/CHANGE-ME/learn-blog
+  github_repo: https://github.com/vianlex/tech-tutorials
   github_branch: main
   copyright:
     authors: '技术学习博客'
