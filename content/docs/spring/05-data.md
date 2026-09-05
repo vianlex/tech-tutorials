@@ -1,7 +1,7 @@
 ---
 title: 第五章 数据访问与事务
 linkTitle: 数据访问与事务
-description: Spring JDBC、Spring Data JPA 与声明式事务管理
+description: Spring JDBC、Spring Data JPA 与声明式事务管理，深入事务属性、失效清单与 N+1 问题
 weight: 15
 ---
 
@@ -9,7 +9,9 @@ weight: 15
 
 ## Spring JDBC {#jdbc}
 
-`JdbcTemplate` 封装了 JDBC 的样板代码（连接管理、异常转换、资源释放）：
+`JdbcTemplate` 封装了 JDBC 的样板代码（连接管理、语句创建、异常转换、资源释放），让你只关心 SQL 与结果映射。Spring 还会把底层 `SQLException` 转换为统一的 `DataAccessException` 体系，屏蔽数据库差异。
+
+**基础查询与 RowMapper**：
 
 ```java
 @Repository
@@ -22,36 +24,191 @@ public class UserDao {
 
     public List<User> findAll() {
         return jdbc.query(
-            "SELECT id, name FROM users",
-            (rs, rowNum) -> new User(rs.getLong("id"), rs.getString("name"))
+            "SELECT id, name, email FROM users",
+            (rs, rowNum) -> new User(
+                rs.getLong("id"),
+                rs.getString("name"),
+                rs.getString("email"))
         );
+    }
+
+    public int countByEmail(String email) {
+        // queryForObject 用于单行单列
+        return jdbc.queryForObject(
+            "SELECT count(*) FROM users WHERE email = ?",
+            Integer.class, email);
+    }
+
+    public int insert(User u) {
+        return jdbc.update(
+            "INSERT INTO users(name, email) VALUES(?, ?)",
+            u.getName(), u.getEmail());
     }
 }
 ```
 
+**`NamedParameterJdbcTemplate`**：用命名参数替代 `?` 占位符，SQL 可读性高、参数顺序无关：
+
+```java
+@Repository
+public class OrderDao {
+    private final NamedParameterJdbcTemplate njdbc;
+
+    public OrderDao(NamedParameterJdbcTemplate njdbc) { this.njdbc = njdbc; }
+
+    public int insert(Order o) {
+        String sql = """
+            INSERT INTO orders(user_id, amount, status)
+            VALUES (:userId, :amount, :status)
+            """;
+        MapSqlParameterSource p = new MapSqlParameterSource()
+            .addValue("userId", o.getUserId())
+            .addValue("amount", o.getAmount())
+            .addValue("status", o.getStatus());
+        return njdbc.update(sql, p);
+    }
+}
+```
+
+**批量操作 `batchUpdate`**：一次性提交多条记录，显著优于循环单条 insert：
+
+```java
+public int[] batchInsert(List<User> users) {
+    String sql = "INSERT INTO users(name, email) VALUES(?, ?)";
+    return jdbc.batchUpdate(sql, users, users.size(), (ps, user) -> {
+        ps.setString(1, user.getName());
+        ps.setString(2, user.getEmail());
+    });
+}
+```
+
+> [!TIP]
+> 批量写入务必配合 JDBC 连接参数 `rewriteBatchedStatements=true`（MySQL）才能合并为真正的批量协议，否则仍是逐条发送。
+
 ## Spring Data JPA {#jpa}
 
-JPA 是 Java 的 ORM 标准，Spring Data JPA 进一步简化了数据访问：
+JPA 是 Java 的 ORM 标准（Hibernate 是最常用实现），Spring Data JPA 进一步把「Repository 实现」也自动化了——你只需写接口，框架在运行时生成代理实现。
+
+**实体定义**：
 
 ```java
 @Entity
+@Table(name = "users")
 public class User {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-    private String name;
-    // getters / setters
-}
 
-// 只需声明接口，Spring 自动实现
-public interface UserRepository extends JpaRepository<User, Long> {
-    List<User> findByNameContaining(String name); // 方法名推导查询
+    @Column(nullable = false, length = 50)
+    private String name;
+
+    @Email
+    private String email;
+
+    @CreatedDate   // 审计字段：首次创建时自动填充
+    private LocalDateTime createTime;
+
+    @LastModifiedDate
+    private LocalDateTime updateTime;
+    // getters / setters
 }
 ```
 
+**Repository 方法名推导**：Spring Data 按方法名解析出查询，约定大于配置：
+
+```java
+public interface UserRepository extends JpaRepository<User, Long> {
+
+    // 方法名 → WHERE name = ?
+    User findByName(String name);
+
+    // 方法名 → WHERE email LIKE %?%
+    List<User> findByNameContaining(String name);
+
+    // AND / OR 组合
+    List<User> findByStatusAndCreateTimeAfter(Status status, LocalDateTime t);
+
+    // 分页 + 排序
+    Page<User> findByStatus(Status status, Pageable pageable);
+
+    // 计数 / 存在性判断
+    long countByStatus(Status status);
+    boolean existsByEmail(String email);
+}
+```
+
+方法名关键字对照：`findBy`/`getBy` 查询，`And`/`Or` 连接，`Between`、`LessThan`、`GreaterThan`、`Like`、`StartingWith`、`Containing`、`OrderByXDesc`、`IgnoreCase` 等。命名过长时（≥4 段条件）建议改用 `@Query`。
+
+**`@Query` 自定义查询（JPQL / 原生 SQL）**：
+
+```java
+public interface UserRepository extends JpaRepository<User, Long> {
+
+    // JPQL：面向实体，而非表
+    @Query("select u from User u where u.email = :email")
+    User findByEmailJpql(@Param("email") String email);
+
+    // 原生 SQL：复杂报表查询时使用 nativeQuery=true
+    @Query(value = "select count(*) from users where status = :s",
+           nativeQuery = true)
+    int countByStatusNative(@Param("s") String status);
+
+    // 更新需用 @Modifying，且注意事务
+    @Modifying
+    @Query("update User u set u.status = :s where u.id = :id")
+    int updateStatus(@Param("id") Long id, @Param("s") Status s);
+}
+```
+
+**分页 `Pageable`**：
+
+```java
+// 第 0 页、每页 10 条、按 createTime 倒序
+Page<User> page = repo.findByStatus(Status.ACTIVE,
+        PageRequest.of(0, 10, Sort.by("createTime").descending()));
+page.getTotalElements();  // 总记录数
+page.getContent();        // 当前页数据
+```
+
+**审计 `@CreatedDate`/`@LastModifiedDate`**：在主类开启 `@EnableJpaAuditing`，实体字段即可在持久化/更新时自动填充时间（需实体实现 `AuditorAware` 或仅用时间字段）。
+
+**关系映射与懒加载 N+1**：
+
+```java
+@Entity
+public class Order {
+    @Id
+    private Long id;
+
+    @ManyToOne(fetch = FetchType.LAZY)   // 默认即 LAZY，避免无谓 join
+    @JoinColumn(name = "user_id")
+    private User user;
+
+    @OneToMany(fetch = FetchType.LAZY, mappedBy = "order")
+    private List<OrderItem> items;       // 一对多集合通常 LAZY
+}
+```
+
+**N+1 问题**：查 N 个 Order 后，循环访问 `order.getUser()`——若 user 是 LAZY，每次访问触发一条 `SELECT user`，共 N+1 条 SQL，性能灾难。解法：
+
+- `@EntityGraph` / `JOIN FETCH` 一次性把关联查出：
+
+  ```java
+  @EntityGraph(attributePaths = "user")
+  List<Order> findByStatus(Status status);
+
+  // 或 JPQL：select o from Order o left join fetch o.user where o.status = :s
+  ```
+- 用 `FetchMode.SUBSELECT` 或批量（`@BatchSize(size = 50)`）把 N 次查询降为 2 次。
+
+> [!WARNING]
+> `@OneToMany` 默认 `LAZY`，但很多新手误以为「查了父就自动带子」。务必在需要关联数据时主动 `JOIN FETCH`，否则落入 N+1 陷阱；同时警惕「事务外访问 LAZY 关联」抛出 `LazyInitializationException`（见事务节）。
+
+**MyBatis / Spring Data JDBC（一句话定位）**：MyBatis 是「SQL 与对象映射」的半自动框架，适合需要手写/调优 SQL 的场景（`@Mapper` 接口 + XML）；Spring Data JDBC 则是对 JPA 的轻量替代，无 Session/缓存、无懒加载，语义更简单。两者都可与 Spring 的事务体系无缝协作。
+
 ## 声明式事务 {#transaction}
 
-使用 `@Transactional` 注解，Spring 通过 AOP 自动管理事务：
+`@Transactional` 是 Spring 用 AOP 实现的声明式事务：在方法前后自动开启/提交/回滚事务，业务代码零侵入。
 
 ```java
 @Service
@@ -60,30 +217,122 @@ public class OrderService {
     @Transactional
     public void placeOrder(Order order) {
         orderRepository.save(order);
-        // 扣减库存，若抛异常则整体回滚
+        // 扣减库存，若抛异常则整体回滚（含上面已 save 的 order）
         stockService.decrease(order.getItems());
     }
 }
 ```
 
-### 事务传播行为 {#propagation}
+## 事务完整属性 {#tx-attributes}
 
-| 传播行为 | 说明 |
-|----------|------|
-| `REQUIRED`（默认） | 有事务则加入，无则新建 |
-| `REQUIRES_NEW` | 总是新建独立事务 |
-| `NESTED` | 嵌套事务，可局部回滚 |
-| `SUPPORTS` | 有则加入，无则非事务执行 |
+`@Transactional` 可配置多个属性，决定事务的边界与行为：
 
-## 事务失效的常见原因 {#pitfalls}
+| 属性 | 说明 | 常用取值 |
+|------|------|----------|
+| `propagation` | 传播行为：当前已有事务时如何处置 | `REQUIRED`(默认)/`REQUIRES_NEW`/`NESTED`/`SUPPORTS`/`NOT_SUPPORTED`/`MANDATORY`/`NEVER` |
+| `isolation` | 隔离级别 | `DEFAULT`/`READ_COMMITTED`/`REPEATABLE_READ`/`SERIALIZABLE` |
+| `readOnly` | 是否只读（优化提示） | `true`/`false` |
+| `rollbackFor` | 指定哪些异常回滚 | `rollbackFor = Exception.class` |
+| `noRollbackFor` | 指定哪些异常不回滚 | — |
+| `timeout` | 超时秒数，超时会回滚 | `timeout = 3` |
+| `transactionManager` | 多数据源时指定事务管理器 | — |
+
+```java
+@Transactional(
+    propagation = Propagation.REQUIRED,
+    isolation = Isolation.READ_COMMITTED,
+    readOnly = true,
+    timeout = 5,
+    rollbackFor = { BizException.class, SQLException.class })
+public List<Order> queryOrders() { /* 只读查询，标记 readOnly 让数据库有机会优化 */ }
+```
+
+**传播行为要点**：
+
+- `REQUIRED`（默认）：有则加入，无则新建——绝大多数业务用它。
+- `REQUIRES_NEW`：总是挂起当前事务、开新事务，新事务的提交/回滚不影响外层（适合「独立记录操作日志」）。
+- `NESTED`：在已存在事务里开保存点，内层回滚只回滚到保存点（需数据库支持 savepoint）。
+
+## 隔离级别与并发问题 {#isolation}
+
+数据库并发访问会产生三类经典异常，隔离级别越高问题越少但性能越差：
+
+| 隔离级别 | 脏读 | 不可重复读 | 幻读 |
+|----------|------|-----------|------|
+| READ UNCOMMITTED | ❌ 可能 | 可能 | 可能 |
+| READ COMMITTED | ✅ 避免 | 可能 | 可能 |
+| REPEATABLE READ | ✅ | ✅ | 可能（MySQL InnoDB 实际已防） |
+| SERIALIZABLE | ✅ | ✅ | ✅ |
+
+- **脏读**：读到别的事务「未提交」的数据（它可能回滚）。
+- **不可重复读**：同一事务内两次读同一行，结果不同（被别的事务更新并提交）。
+- **幻读**：同一事务内两次范围查询，行数不同（被别的事务插入/删除）。
+
+> [!TIP]
+> 一般应用用 `READ_COMMITTED`（Oracle 默认）即可，MySQL 默认 `REPEATABLE_READ`。`SERIALIZABLE` 性能代价大，仅在极强一致性需求下使用。
+
+## 事务失效的完整清单 {#tx-pitfalls}
+
+`@Transactional` 不在代理外生效，以下是「注解写了却不回滚」的全部常见原因：
 
 > [!WARNING]
-> 以下情况 `@Transactional` 会失效：
-> 1. 同类内部方法自调用（绕过代理）。
-> 2. 方法不是 `public`。
-> 3. 异常被 `try-catch` 吞掉。
-> 4. 抛出的异常类型未被指定回滚。
+> 1. **同类内部自调用**：`this.methodB()` 绕过代理，事务不开启（解法见下）。
+> 2. **方法非 public**：Spring AOP 默认只代理 public 方法（CGLIB 也要求可重写）。
+> 3. **异常被 try-catch 吞掉**：方法内部捕获了异常且未重新抛出，Spring 感知不到。
+> 4. **异常类型不匹配**：默认只对 `RuntimeException`/`Error` 回滚；受检异常（`Exception`）不回滚，需 `rollbackFor = Exception.class`。
+> 5. **修饰了 final/static**：CGLIB 无法重写，代理失效。
+> 6. **数据库引擎不支持事务**：如 MySQL 用 MyISAM（请改用 InnoDB）。
+> 7. **多线程**：事务绑定在当前线程的 `ThreadLocal`，新线程里的新操作不在同一事务。
+> 8. **跨数据源**：未配置分布式事务（JTA / Seata），各自独立提交。
+
+**自调用解法**（与 AOP 自调用同源）：
+
+```java
+@Service
+public class OrderService {
+    private final OrderService self; // 注入代理自身
+    public OrderService(OrderService self) { this.self = self; }
+
+    public void batch(List<Order> orders) {
+        for (Order o : orders) {
+            self.placeOrder(o); // ✅ 走代理，每个 placeOrder 各自事务
+        }
+    }
+
+    @Transactional
+    public void placeOrder(Order o) { /* ... */ }
+}
+```
+
+> [!NOTE]
+> 更推荐的做法是**拆类**：把 `placeOrder` 抽到独立的 `OrderTxService`，让事务边界天然落在跨代理调用上，代码更清晰。
+
+## 编程式事务 `TransactionTemplate` {#programmatic-tx}
+
+当注解方式不够灵活（如需要手动控制提交点、在循环里精细化控制），可用 `TransactionTemplate` 编程式管理：
+
+```java
+@Service
+public class ReportService {
+    private final TransactionTemplate tx;
+
+    public ReportService(PlatformTransactionManager tm) {
+        this.tx = new TransactionTemplate(tm); // 注入事务管理器
+    }
+
+    public void rebuild() {
+        tx.executeWithoutResult(status -> {
+            // 在事务内执行
+            step1();
+            step2();
+            // 若抛异常自动回滚；可 status.setRollbackOnly() 手动标记回滚
+        });
+    }
+}
+```
+
+编程式事务适合「非标准边界」场景（如批量分片提交、手动回滚部分逻辑），日常业务仍优先用声明式 `@Transactional`。
 
 ## 小结 {#summary}
 
-Spring 提供了从 JDBC 到 JPA 的多层数据访问抽象，配合声明式事务，让数据操作既简洁又安全。至此 Spring 核心教程完成，建议动手实践巩固。
+Spring 提供了从 `JdbcTemplate` 到 Spring Data JPA 的多层数据访问抽象，并以 AOP 支撑的声明式事务保证一致性。掌握事务属性、隔离级别与「失效清单」，才能避免「看似有事务、实则没回滚」的线上事故。至此 Spring 核心教程完成，建议结合示例工程动手实践、读源码加深理解。

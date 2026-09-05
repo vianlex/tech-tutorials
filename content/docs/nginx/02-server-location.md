@@ -79,9 +79,7 @@ location /images/ {
 
 注意：`alias` 结尾的 `/` 要与 `location` 的 `/` 对应；`alias` 通常不能用于 `location /`，否则需写成 `alias /var/www/;`。
 
-### 可以指向任意目录吗 {#any-directory}
-
-可以。`root` 与 `alias` 的值是**任意的本地绝对路径**，并不局限于 `/var/www` 或某个「站点根目录」——只要是 Nginx worker 进程有读取权限的目录即可。例如映射到用户主目录、数据盘，甚至某个任意位置：
+特别注意：`root` 与 `alias` 的值是**任意的本地绝对路径**，并不局限于 `/var/www` 或某个「站点根目录」——只要是 Nginx worker 进程有读取权限的目录即可。例如映射到用户主目录、数据盘，甚至某个任意位置：
 
 ```nginx
 # 映射到用户主目录下的静态资源
