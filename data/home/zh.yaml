@@ -18,7 +18,7 @@ hero:
 cards:
   eyebrow: 教程目录
   title: 点击卡片，进入对应教程
-  desc: 从四门核心语言到现代工程工具与 AI 编程助手，共 13 套教程。
+  desc: 从四门核心语言到现代工程工具与 AI 编程助手，共 16 套教程。
   columns: 4
   link_label: 进入教程
   items:
@@ -30,7 +30,10 @@ cards:
     - { name: Node.js 教程, icon: fa-brands fa-node-js, desc: 模块系统、异步编程、核心模块与 Web 开发, url: docs/nodejs/ }
     - { name: Git 使用教程, icon: fa-brands fa-git-alt, desc: 版本控制，分支、远程协作、历史管理, url: docs/git/ }
     - { name: Groovy 教程, icon: fa-solid fa-cubes, desc: JVM 动态语言，闭包、元编程、Gradle 与 Jenkins, url: docs/groovy/ }
+    - { name: Maven 教程, icon: fa-solid fa-box-open, desc: 构建与依赖管理，坐标、生命周期、多模块工程, url: docs/maven/ }
     - { name: Nginx 配置教程, icon: fa-solid fa-server, desc: 核心指令、反向代理、负载均衡、性能与安全, url: docs/nginx/ }
+    - { name: sed 使用教程, icon: fa-solid fa-scissors, desc: 流编辑器，查找替换、行定位、批量处理文本, url: docs/sed/ }
+    - { name: awk 使用教程, icon: fa-solid fa-filter, desc: 文本处理利器，字段、模式、统计与报表, url: docs/awk/ }
     - { name: Pi Agent 教程, icon: fa-solid fa-terminal, desc: 极简终端 AI 编程 Agent，多模型与扩展, url: docs/pi-agent/ }
     - { name: Claude Code 教程, icon: fa-solid fa-wand-magic-sparkles, desc: 官方终端编程助手，CLAUDE.md、MCP、Hooks, url: docs/claude-code/ }
     - { name: OpenCode 教程, icon: fa-solid fa-code, desc: 开源 AI 编程 Agent，终端/桌面/IDE 三形态, url: docs/opencode/ }

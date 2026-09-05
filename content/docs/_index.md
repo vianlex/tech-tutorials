@@ -22,6 +22,7 @@ weight: 20
 - [OpenCode 使用教程](/docs/opencode/)
 - [DeepSeek Harness 使用教程](/docs/deepseek-harness/)
 - [Groovy 教程](/docs/groovy/)
+- [Maven 教程](/docs/maven/)
 - [Nginx 配置教程](/docs/nginx/)
 - [sed 使用教程](/docs/sed/)
 - [awk 使用教程](/docs/awk/)
