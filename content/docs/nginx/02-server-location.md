@@ -79,6 +79,38 @@ location /images/ {
 
 注意：`alias` 结尾的 `/` 要与 `location` 的 `/` 对应；`alias` 通常不能用于 `location /`，否则需写成 `alias /var/www/;`。
 
+### 可以指向任意目录吗 {#any-directory}
+
+可以。`root` 与 `alias` 的值是**任意的本地绝对路径**，并不局限于 `/var/www` 或某个「站点根目录」——只要是 Nginx worker 进程有读取权限的目录即可。例如映射到用户主目录、数据盘，甚至某个任意位置：
+
+```nginx
+# 映射到用户主目录下的静态资源
+location /uploads/ {
+    alias /home/alice/uploads/;   # 访问 /uploads/pic.jpg → /home/alice/uploads/pic.jpg
+}
+
+# 映射到挂载的数据盘
+location /data/ {
+    root /mnt/data-disk;          # 访问 /data/report.pdf → /mnt/data-disk/data/report.pdf
+}
+```
+
+`root` 与 `alias` 的区别依然适用：`root` 把完整请求 URI 拼接到路径后，`alias` 用配置值整体替换 `location` 匹配的部分。因此映射到「路径名与 URI 不一致」的任意目录时，`alias` 通常更直观。
+
+但有三个前提与坑要注意：
+
+1. **权限（最常见的问题）**：Nginx 默认以 `nginx`/`www-data` 这类低权限用户运行 worker 进程，它必须对目标目录及其上级路径有**读 + 执行**权限，否则会返回 `403 Forbidden` 或 `404`。任意目录往往权限较严（如 `/home/alice` 默认 `700`），需要相应放行，例如：
+   ```bash
+   chmod 755 /home/alice /home/alice/uploads
+   # 或把目录属主交给 nginx 运行用户
+   chown -R nginx:nginx /home/alice/uploads
+   ```
+   排查时先看错误日志 `error_log` 里的 `Permission denied`。
+
+2. **`alias` 的作用域局限**：`alias` 只在 `location` 内有效，不能放到 `server` 或 `http` 层；`root` 则可以在任意层级声明并被继承。
+
+3. **别把敏感目录暴露出去**：正因为能指任意路径，`alias` 指向 `/etc`、`/home`、`/root`、`.git` 等敏感位置并开放给公网，会造成信息泄露甚至安全风险。生产环境务必只映射确实需要对外提供的目录，并用 `location` 精确限定前缀。
+
 ## try_files 指令 {#try-files}
 
 `try_files` 按顺序尝试文件/目录，最后回退到指定 URI，常用于静态站点与前端路由：
