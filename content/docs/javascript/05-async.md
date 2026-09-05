@@ -1,7 +1,7 @@
 ---
 title: 第五章 异步编程与 Promise
 linkTitle: 异步编程
-description: 事件循环与任务队列、回调地狱、Promise 状态与链式调用、静态方法、async/await 实战、并发控制与 AbortController 取消请求
+description: 事件循环与任务队列、回调地狱、Promise 状态与链式调用、静态方法、async/await 实战与错误处理多种方式、并发控制与 AbortController 取消请求
 weight: 25
 ---
 
@@ -232,7 +232,11 @@ load().then((v) => console.log(v));     // 42
 //       await 后若是普通值，会被包成 resolved Promise
 ```
 
-### 错误处理 try/catch {#async-error}
+### 错误处理：await 遇到 reject 的几种方式 {#async-error}
+
+`await` 会把 Promise 的 reject 变成「同步抛异常」，所以最直观的是 `try/catch`。但除此之外还有几种方式，取决于你想让错误「中断流程」还是「就地消化」。
+
+#### 方式一：try/catch（最基础）
 
 ```javascript
 async function loadUserData(id) {
@@ -247,6 +251,100 @@ async function loadUserData(id) {
     }
 }
 ```
+
+适合需要区分多种错误、或用 `finally` 做清理（如关连接、隐藏 loading）的场景。
+
+#### 方式二：await 表达式后接 .catch()（就地兜底）
+
+`await` 的是表达式，可以先给表达式接一个 `.catch()`，把错误在源头吞掉或转成默认值，这样 `await` 永远不抛错：
+
+```javascript
+// 出错时返回兜底值，不中断流程
+const data = await fetchData().catch(() => null);
+
+// 出错时记录日志，仍返回默认对象
+const user = await getUser().catch(err => {
+    console.error(err);
+    return { name: '匿名用户' };
+});
+```
+
+适合「单个调用失败没关系，给个默认值继续」的场景。
+
+#### 方式三：返回结果对象（错误不进 catch）
+
+约定「不抛异常」，而是返回 `{ data, error }` 结构，调用方显式判断：
+
+```javascript
+async function toResult(promise) {
+    try {
+        return { data: await promise, error: null };
+    } catch (error) {
+        return { data: null, error };
+    }
+}
+
+const { data, error } = await toResult(fetchData());
+if (error) { /* 处理 */ }
+```
+
+好处是错误显式、不会「忘记 catch」；代价是每处调用都要判断 `error`。
+
+#### 方式四：Promise.allSettled（并发允许部分失败）
+
+`Promise.all` 一个 reject 就整体失败；`allSettled` 会等全部结束，每个结果带 `status` 标记，错误在 `reason` 里而非抛异常：
+
+```javascript
+const results = await Promise.allSettled([a(), b(), c()]);
+
+for (const r of results) {
+    if (r.status === 'fulfilled') console.log('成功', r.value);
+    else console.log('失败', r.reason);
+}
+```
+
+适合并发多个请求、允许部分失败继续处理其余的场景。
+
+#### 方式五：顶层 await 无法 try/catch 时
+
+模块顶层的 `await` 不在函数里，无法用 `try/catch` 包裹，可改用 `.catch()` 或 IIFE：
+
+```javascript
+// 顶层 await（ESM）
+const data = await fetchData().catch(() => null);
+
+// 或包一层立即执行函数
+(async () => {
+    try { await fetchData(); } catch (e) { /* ... */ }
+})();
+```
+
+#### 配合 AbortController 主动取消
+
+超时/主动取消时，捕获后按错误名区分处理：
+
+```javascript
+const controller = new AbortController();
+setTimeout(() => controller.abort(), 5000);  // 5 秒超时
+
+try {
+    await fetch(url, { signal: controller.signal });
+} catch (err) {
+    if (err.name === 'AbortError') console.log('已取消');
+    else throw err;
+}
+```
+
+| 方式 | 适用场景 |
+|------|---------|
+| `try/catch` | 区分多种错误、需要 finally 清理 |
+| `await x.catch(...)` | 单次失败给默认值/日志，不中断 |
+| `{ data, error }` 封装 | 团队约定「不抛异常」，错误显式传递 |
+| `Promise.allSettled` | 并发多个请求，允许部分失败 |
+| 顶层 `.catch()` / IIFE | 模块顶层无法用 try/catch 时 |
+
+> [!TIP]
+> 核心判断：想让错误**中断当前流程**用 `try/catch`；想**就地消化**（给默认值、继续跑）用 `.catch()` 或结果对象；**并发允许部分失败**用 `allSettled`。
 
 ### 并行 vs 串行 {#parallel-vs-serial}
 
@@ -357,4 +455,4 @@ controller.abort();   // 需要时取消（如组件卸载、输入变化）
 
 ## 小结 {#summary}
 
-本章从事件循环的调用栈、宏任务与微任务调度出发，解释 `setTimeout` 与 `Promise.then` 的执行顺序差异；随后深入 Promise 状态不可逆、链式调用与错误穿透，对比 `all/allSettled/race/any` 语义，并实战封装带超时/重试的 fetch、并发池与 `AbortController` 取消。掌握这些便能在真实项目写出健壮可控的异步代码。至此五章教程结束，建议结合文档站其他专题（如框架、工程化）继续深入。
+本章从事件循环的调用栈、宏任务与微任务调度出发，解释 `setTimeout` 与 `Promise.then` 的执行顺序差异；随后深入 Promise 状态不可逆、链式调用与错误穿透，对比 `all/allSettled/race/any` 语义；再讲解 `async/await` 的错误处理多种方式（`try/catch`、就地 `.catch()`、结果对象、`allSettled`、顶层 await 兜底、AbortController 取消），并实战封装带超时/重试的 fetch、并发池。掌握这些便能在真实项目写出健壮可控的异步代码。至此五章教程结束，建议结合文档站其他专题（如框架、工程化）继续深入。
