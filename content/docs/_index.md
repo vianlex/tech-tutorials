@@ -14,6 +14,7 @@ weight: 20
 - [JavaScript 教程](/docs/javascript/)
 - [Golang 教程](/docs/golang/)
 - [Python 教程](/docs/python/)
+- [Uv 教程](/docs/uv/)
 - [FastAPI 教程](/docs/fastapi/)
 - [Node.js 教程](/docs/nodejs/)
 - [Git 使用教程](/docs/git/)
