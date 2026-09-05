@@ -86,6 +86,44 @@ Shift+Tab      循环思考级别
 /trust        保存项目信任决策（写入 trust.json，需重启生效）
 ```
 
+## 运行中追加指令：Steering 与 Follow-up {#steering-followup}
+
+Agent 跑起来之后想插话是常见需求，但「插话」分两种完全不同的情况，Pi 用两个独立队列把它们严格分开：
+
+```text
+Steering（中途改向）    Agent 正在执行时你想改变方向
+                      例：「等等，先别改那个文件」
+                      在「当前这轮工具跑完后、下一次模型响应前」注入
+
+Follow-up（追加任务）   Agent 干完手头的活后你想加新任务
+                      例：「顺便再帮我写个测试」
+                      等 Agent 完全停下来再处理，不打断当前工作
+```
+
+如果把两者混在一起，逻辑就乱了：Follow-up 可能在干到一半就被处理，Steering 也可能等干完才生效。分成两个队列后语义就清晰了。
+
+### 快捷键 {#steering-keys}
+
+```text
+Enter       发一条 Steering 消息（这轮工具跑完后注入）
+Alt+Enter   发一条 Follow-up 消息（Agent 完全停下后处理）
+Escape      取消发送，把队列里的消息恢复到编辑器
+Alt+Up      把已排队的消息取回编辑器重新编辑
+```
+
+> 注意：Windows Terminal 里 `Alt+Enter` 默认是全屏切换，需要先到终端设置里改掉这个绑定，Pi 才能收到 Follow-up 快捷键。
+
+### 投递节奏 {#steering-mode}
+
+每个队列都有 `mode` 控制节奏，在 `settings.json` 中配置（详见第三章）：
+
+```text
+one-at-a-time   默认，队列里有多条就每次只取一条，等模型响应完再取下一条
+all             一次把队列里的全部消息都倒进去
+```
+
+大多数场景用默认即可；`all` 适合「预先准备好一批任务，一次性全扔进去」的用法。
+
 ## 文件引用与 Bash 模式 {#files-bash}
 
 在对话中引用项目文件与执行命令：
