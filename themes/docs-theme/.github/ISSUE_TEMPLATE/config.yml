@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Documentation
+    url: https://docs.pgsty.com/docs/
+    about: Check the documentation before filing a configuration question.

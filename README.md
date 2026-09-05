@@ -1,6 +1,6 @@
 # 技术学习博客 (tech-tutorials)
 
-基于 Hugo + [OINK 主题](https://github.com/pgsty/oink) 搭建的个人技术教程站点，部署在 Cloudflare Pages。
+基于 Hugo + 文档主题搭建的个人技术教程站点，部署在 Cloudflare Pages。
 
 - **线上地址**：https://amias.icu/
 - **仓库地址**：https://github.com/vianlex/tech-tutorials
@@ -25,7 +25,7 @@ content/
 | 组件 | 说明 |
 | --- | --- |
 | [Hugo](https://gohugo.io/) | 静态站点生成器（v0.158+） |
-| [OINK](https://github.com/pgsty/oink) | Hugo 文档主题（Docsy 分叉，v1.0.0，离线归档方式安装在 `themes/oink/`） |
+| 文档主题 | Hugo 文档主题（v1.0.0，本地安装在 `themes/docs-theme/`） |
 | Cloudflare Pages | 托管与 CDN |
 | GitHub Actions | 推送 main 分支自动部署（wrangler Direct Upload） |
 
@@ -56,7 +56,7 @@ hugo --gc --minify --printPathWarnings --panicOnWarning
 - 内容放在 `content/docs/<教程名>/` 下，每章一个 Markdown 文件
 - 章节文件使用 front matter 的 `weight` 控制排序
 - 站点配置集中在 `hugo.yml`（语言、菜单、主题参数等）
-- 主题支持 `steps` / `cards` 等原生 Markdown 组件，用法参见 OINK 主题文档
+- 主题支持 `steps` / `cards` 等原生 Markdown 组件，用法参见主题文档
 
 ## License
 
