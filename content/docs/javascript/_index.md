@@ -16,3 +16,5 @@ JavaScript 是 Web 开发的核心语言，如今也能用于服务端（Node.js
 - [第三章：ES6+ 现代特性](/docs/javascript/03-es6/) — 解构、箭头函数、模块、类
 - [第四章：DOM 与事件](/docs/javascript/04-dom/) — 操作网页与事件处理
 - [第五章：异步编程与 Promise](/docs/javascript/05-async/) — 回调、Promise、async/await
+- [第六章：正则表达式](/docs/javascript/06-regex/) — 元字符、量词、分组、断言、常用实例
+- [第七章：原型与原型链](/docs/javascript/07-prototype/) — 构造函数、prototype、继承、class 语法糖
