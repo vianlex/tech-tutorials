@@ -1,7 +1,7 @@
 ---
 title: 第三章 Spring MVC
 linkTitle: Spring MVC
-description: Spring MVC 的请求处理链路、参数绑定、数据校验、统一异常与拦截器过滤器区别
+description: Spring MVC 请求处理链路、参数绑定、数据校验、统一异常、拦截器/过滤器/AOP 对比、WebMvcConfigurer、CORS、异步 MVC
 weight: 13
 ---
 
@@ -286,3 +286,291 @@ public User getUser(@PathVariable Long id) { return userService.findById(id); }
 ## 小结 {#summary}
 
 Spring MVC 通过 `DispatcherServlet` 把请求分发、参数绑定、校验、序列化、异常处理拆成各司其职的组件，配合拦截器与 AOP 形成完整的 Web 处理链路。下一章学习 Spring Boot——它会把 Controller、配置、内嵌服务器等一切「开箱即用」地组装起来。
+
+## WebMvcConfigurer 完整配置 {#webmvc-configurer}
+
+`WebMvcConfigurer` 是 Spring MVC 的"统一配置入口"，覆盖拦截器之外的几乎所有 MVC 行为。实现它并标注 `@Configuration` 即可生效：
+
+```java
+@Configuration
+public class WebConfig implements WebMvcConfigurer {
+
+    @Override
+    public void addInterceptors(InterceptorRegistry registry) { /* 拦截器 */ }
+
+    @Override
+    public void configureMessageConverters(List<HttpMessageConverter<?>> converters) { /* 消息转换器 */ }
+
+    @Override
+    public void configureContentNegotiation(ContentNegotiationConfigurer configurer) { /* 内容协商 */ }
+
+    @Override
+    public void addFormatters(FormatterRegistry registry) { /* 类型格式化 */ }
+
+    @Override
+    public void addResourceHandlers(ResourceHandlerRegistry registry) { /* 静态资源 */ }
+
+    @Override
+    public void addCorsMappings(CorsRegistry registry) { /* CORS 跨域 */ }
+
+    @Override
+    public void addViewControllers(ViewControllerRegistry registry) { /* 直接映射视图 */ }
+}
+```
+
+### 静态资源配置
+
+```java
+@Override
+public void addResourceHandlers(ResourceHandlerRegistry registry) {
+    // /static/** 映射到 classpath:/static/
+    registry.addResourceHandler("/static/**")
+            .addResourceLocations("classpath:/static/")
+            .setCachePeriod(3600);          // 缓存 1 小时
+
+    // /upload/** 映射到本地文件系统（头像、PDF 等）
+    registry.addResourceHandler("/upload/**")
+            .addResourceLocations("file:/var/www/upload/");
+}
+```
+
+### 视图直跳
+
+```java
+@Override
+public void addViewControllers(ViewControllerRegistry registry) {
+    // 一些纯静态跳转（如登录页），省去写 Controller
+    registry.addViewController("/login").setViewName("login");
+    registry.addRedirectViewController("/home", "/dashboard");
+}
+```
+
+### 自定义消息转换器
+
+```java
+@Override
+public void configureMessageConverters(List<HttpMessageConverter<?>> converters) {
+    // 加入自定义的 Converter，如 Protobuf、Excel 导出等
+    converters.add(0, new ProtobufHttpMessageConverter());
+}
+```
+
+> [!WARNING]
+> `configureMessageConverters` 完全覆盖默认；`extendMessageConverters` 是在默认基础上追加。**99% 的场景用 `extendMessageConverters`**——只增不改，避免误删 Jackson 等关键转换器。
+
+## 跨域 CORS 完整方案 {#cors}
+
+跨域是前后端分离必踩的坑。Spring 提供**三档配置**：
+
+### 1. 全局 CORS（推荐）
+
+```java
+@Configuration
+public class WebConfig implements WebMvcConfigurer {
+    @Override
+    public void addCorsMappings(CorsRegistry registry) {
+        registry.addMapping("/api/**")               // 匹配路径
+                .allowedOriginPatterns("*")           // 允许的源（* 表示所有）
+                .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
+                .allowedHeaders("*")
+                .exposedHeaders("Authorization")     // 暴露给前端读的自定义响应头
+                .allowCredentials(true)              // 允许 cookie
+                .maxAge(3600);                        // 预检缓存 1 小时
+    }
+}
+```
+
+### 2. Controller 级 CORS
+
+```java
+@RestController
+@RequestMapping("/api/users")
+@CrossOrigin(origins = "https://example.com", maxAge = 3600)
+public class UserController { /* ... */ }
+```
+
+### 3. 方法级 CORS（最精细）
+
+```java
+@PostMapping("/login")
+@CrossOrigin(origins = "*", methods = RequestMethod.POST)
+public Result login(@RequestBody LoginForm form) { /* ... */ }
+```
+
+> [!TIP]
+> **预检请求**：浏览器发现"非简单请求"（非 GET/HEAD/POST，或 Content-Type 是 application/json 等）会先发一个 OPTIONS 预检。`maxAge` 告诉浏览器多久内不必再预检——这个值太小会让每个请求都多一次往返。
+
+## 异步 MVC：处理长耗时请求 {#async-mvc}
+
+默认 Spring MVC 用**同步阻塞**模型——Servlet 线程要等业务完成才释放。当业务需要远程调用/等待外部资源时，会**长时间占用**线程，导致 Tomcat 线程耗尽。异步 MVC 让 Servlet 线程**立即返回**（先去处理其他请求），业务完成后**异步写回响应**。
+
+### 三种返回值
+
+```java
+// 1) Callable<T>：适合简单的"等待另一个线程的结果"
+@GetMapping("/async/callable")
+public Callable<User> callable() {
+    return () -> {
+        Thread.sleep(2000);  // 模拟耗时
+        return userService.findById(1L);
+    };
+}
+
+// 2) DeferredResult<T>：复杂异步（结果由其他线程/事件产生）
+@GetMapping("/async/deferred")
+public DeferredResult<User> deferred() {
+    DeferredResult<User> dr = new DeferredResult<>(5000L); // 5s 超时
+    // 在另一个线程/事件里 setResult
+    executor.submit(() -> dr.setResult(userService.findById(1L)));
+    return dr;
+}
+
+// 3) ResponseBodyEmitter：流式输出（SSE 风格）
+@GetMapping("/stream")
+public ResponseBodyEmitter stream() {
+    ResponseBodyEmitter emitter = new ResponseBodyEmitter();
+    executor.submit(() -> {
+        for (int i = 0; i < 10; i++) {
+            emitter.send("event " + i);
+            emitter.complete();
+        }
+    });
+    return emitter;
+}
+```
+
+### 异步配置
+
+```yaml
+spring:
+  mvc:
+    async:
+      request-timeout: 30000      # 异步请求总超时（毫秒）
+  task-execution:
+    pool:
+      core-size: 8
+      max-size: 64
+      queue-capacity: 200         # 异步任务线程池
+```
+
+```mermaid
+flowchart LR
+    A["Servlet 线程<br/>接到请求"] -->|"立即返回 Callable/DeferredResult"| B["容器持有 future"]
+    B --> C["Servlet 线程空闲<br/>处理其他请求"]
+    B -.异步执行.-> D["业务线程<br/>执行 Callable"]
+    D -->|"完成后"| E["回到 Servlet 线程<br/>写出响应"]
+```
+
+> [!TIP]
+> **SSE（Server-Sent Events）** 是浏览器原生支持的"服务器推"协议，结合 `ResponseBodyEmitter` 或 `SseEmitter` 即可实现。适用于实时通知、股票报价、AI 流式输出等场景，比 WebSocket 简单很多（单向、HTTP 友好）。
+
+## Servlet API 与 Spring MVC 集成 {#servlet-api}
+
+Spring MVC 基于 Servlet 规范（Spring 5+ 起也支持 Reactive/WebFlux）。Controller 方法参数支持直接注入 Servlet 原生对象，便于处理 cookie、流等场景：
+
+```java
+@GetMapping("/download")
+public void download(HttpServletRequest req,
+                     HttpServletResponse resp,
+                     @CookieValue("token") String token) throws IOException {
+    resp.setContentType("application/octet-stream");
+    resp.setHeader("Content-Disposition", "attachment; filename=data.zip");
+    Files.copy(Paths.get("/tmp/data.zip"), resp.getOutputStream());
+}
+```
+
+**常用 Servlet 对象**：
+
+| 类型 | 用途 |
+|------|------|
+| `HttpServletRequest` | 读取请求头、参数、body 流 |
+| `HttpServletResponse` | 写响应头、流 |
+| `HttpSession` | 读写 session |
+| `ServletInputStream` / `OutputStream` | 原始流 |
+| `Locale` / `TimeZone` | 本地化与时区 |
+
+> [!TIP]
+> 多数场景用 `@RequestBody`/`@ResponseBody`/Spring 数据绑定即可；只在需要细粒度控制（流式下载、二进制输出、cookie 手动管理）才需要直接接 Servlet API。
+
+## 静态资源与缓存策略 {#static-resources}
+
+```java
+// application.yml
+spring:
+  mvc:
+    static-path-pattern: /static/**        # 静态资源匹配模式
+  web:
+    resources:
+      cache:
+        cachecontrol:
+          max-age: 31536000                # 浏览器强缓存 1 年（带 hash 的文件名最佳）
+          cache-public: true
+```
+
+```java
+// 自定义 ResourceHandler 时的缓存
+@Override
+public void addResourceHandlers(ResourceHandlerRegistry registry) {
+    registry.addResourceHandler("/static/**")
+            .addResourceLocations("classpath:/static/")
+            .setCacheControl(CacheControl.maxAge(30, TimeUnit.DAYS).cachePublic())
+            .resourceChain(true);          // 启用版本化（ResourceResolver）
+}
+```
+
+**生产建议**：用 `nginx` 或 CDN 处理静态资源；Spring Boot 仅作后端 API 时，可禁用静态资源：
+
+```yaml
+spring:
+  web:
+    resources:
+      add-mappings: false                  # 不处理 /static/**，交给 nginx
+```
+
+## @ControllerAdvice 高级用法 {#controller-advice-advanced}
+
+### basePackages 限定生效范围
+
+```java
+@RestControllerAdvice(basePackages = "com.example.api")
+public class AdminApiAdvice { /* 只对 com.example.api 包生效 */ }
+```
+
+### 与 @Order 配合优先级
+
+```java
+@RestControllerAdvice
+@Order(1)               // 数值越小优先级越高
+public class GlobalAdvice { /* 全局兜底 */ }
+
+@RestControllerAdvice(basePackages = "com.example.api")
+@Order(2)               // 特定业务异常优先匹配
+public class ApiAdvice { /* 业务异常 */ }
+```
+
+### 与 @InitBinder 配合请求预处理
+
+```java
+@ControllerAdvice
+public class GlobalBinder {
+
+    // 给所有 @ModelAttribute 绑定的 String 自动 trim
+    @InitBinder
+    public void initBinder(WebDataBinder binder) {
+        binder.registerCustomEditor(String.class, new StringTrimmerEditor(true));
+    }
+}
+```
+
+## 小结（升级版） {#summary-updated}
+
+Spring MVC 通过 `DispatcherServlet` 把请求分发、参数绑定、校验、序列化、异常处理拆成各司其职的组件。本章进阶内容：
+
+- **WebMvcConfigurer 完整配置**：拦截器、静态资源、视图跳转、消息转换器、CORS。
+- **CORS 三档配置**：全局 / Controller 级 / 方法级；理解预检与缓存。
+- **异步 MVC**：`Callable` / `DeferredResult` / `ResponseBodyEmitter`，避免长请求占满线程池。
+- **Servlet API 集成**：直接读写请求/响应/cookie/流的场景与最佳实践。
+- **静态资源**：浏览器强缓存、生产 nginx 托管配置。
+- **@ControllerAdvice 高级**：basePackages 范围限定、@Order 优先级、@InitBinder 预处理。
+
+下一章学习 Spring Boot——它把 Controller、配置、内嵌服务器等一切"开箱即用"地组装起来。

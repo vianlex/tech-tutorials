@@ -1,7 +1,7 @@
 ---
 title: 第一章 Spring 概述与 IoC
 linkTitle: 概述与 IoC
-description: Spring 框架定位、核心容器与依赖注入（IoC）原理，深入 Bean 生命周期、作用域、循环依赖与条件装配
+description: Spring 框架定位、核心容器、依赖注入（IoC）原理，深入 Bean 生命周期、作用域、循环依赖、条件装配、BeanDefinition、FactoryBean、事件机制
 weight: 11
 ---
 
@@ -365,3 +365,271 @@ public CacheManager cacheManager() {
 ## 小结 {#summary}
 
 IoC/DI 把「谁创建对象、谁装配依赖」的控制权从业务代码反转给了容器，是 Spring 解耦与可测试性的根基。通过 Bean 生命周期、作用域、循环依赖与条件装配等机制，容器在不同场景下都能给出合理的对象管理策略。下一章将学习建立在 IoC 之上的 AOP——它同样依赖容器为你「悄悄」生成代理对象。
+
+## BeanDefinition：容器眼中的 Bean {#bean-definition}
+
+容器不直接持有「对象」，它先持有「BeanDefinition」（Bean 的定义信息），再按定义创建对象。理解这一点是排查"为什么我的 Bean 没生效"的前提。
+
+一个 `BeanDefinition` 至少包含：
+
+- **beanClass**：实际类名。
+- **scope**：作用域（singleton / prototype / request ...）。
+- **isLazyInit**：是否懒加载。
+- **autowireMode**：自动装配模式（按类型/按名称/不装配）。
+- **initMethod / destroyMethod**：初始化/销毁方法名。
+- **constructorArgumentValues**：构造器参数值。
+- **propertyValues**：属性值集合（用 XML 配置时最直观）。
+
+```mermaid
+flowchart LR
+    A["配置源<br/>注解/XML/@Bean"] --> B["BeanDefinition"]
+    B --> C["BeanFactory"]
+    C --> D["Bean 实例"]
+    B -.描述.-> C
+```
+
+```java
+// 编程式注册 BeanDefinition（极少使用，理解原理即可）
+DefaultListableBeanFactory factory = new DefaultListableBeanFactory();
+AbstractBeanDefinition def = BeanDefinitionBuilder
+    .genericBeanDefinition(UserService.class)
+    .setScope("singleton")
+    .setLazyInit(false)
+    .setInitMethodName("init")
+    .setDestroyMethodName("destroy")
+    .addPropertyValue("name", "默认名")
+    .getBeanDefinition();
+factory.registerBeanDefinition("userService", def);
+```
+
+> [!NOTE]
+> 实际开发中我们几乎不会编程式注册 Bean——`@Component`/`@Bean` 等注解最终都会被 Spring 解析成 `BeanDefinition`。了解这层抽象的好处是：遇到"Bean 没被识别"时，能想到用 `BeanDefinitionRegistryPostProcessor` 介入注册过程（高级定制场景）。
+
+## FactoryBean：工厂 Bean 的奥秘 {#factory-bean}
+
+`FactoryBean` 是一个**特殊的 Bean**，它的作用是「生产其他 Bean」——即容器拿到的不是 `FactoryBean` 本身，而是它 `getObject()` 返回的对象。
+
+```java
+@Component
+public class SqlSessionFactoryBean implements FactoryBean<SqlSession> {
+    @Override
+    public SqlSession getObject() {
+        // 复杂的构建过程（读取配置、连接池、Mapper 扫描...）
+        return buildSqlSession();
+    }
+    @Override
+    public Class<?> getObjectType() { return SqlSession.class; }
+    @Override
+    public boolean isSingleton() { return true; }
+}
+```
+
+**如何拿到真正的 FactoryBean 本身**？容器有特殊规则：取名为 `&sqlSessionFactoryBean` 时返回工厂本身，取 `sqlSessionFactoryBean` 时返回它生产的对象：
+
+```java
+// 拿到的是 SqlSession（生产物）
+SqlSession session = context.getBean("sqlSessionFactoryBean", SqlSession.class);
+// 拿到的是 SqlSessionFactoryBean（工厂本身）
+SqlSessionFactoryBean factory = (SqlSessionFactoryBean)
+    context.getBean("&sqlSessionFactoryBean");
+```
+
+> [!TIP]
+> MyBatis-Spring 的 `SqlSessionFactoryBean`、Spring 内置的 `GatewayClientFactoryBean`、各种第三方缓存/数据库客户端都用此模式。它的核心价值是「把复杂构建逻辑封装到一个 Bean 里」，让普通 Bean 走依赖注入即可。
+
+## ApplicationContext 完整初始化流程 {#init-flow}
+
+`ApplicationContext.refresh()` 是容器初始化的"主流程"，所有 Spring Boot 启动最终都会调用它：
+
+```mermaid
+flowchart TB
+    A["1. 准备环境 Environment"] --> B["2. 加载 BeanDefinition<br/>（解析 @Component/@Bean）"]
+    B --> C["3. BeanFactoryPostProcessor<br/>可在此修改 BeanDefinition"]
+    C --> D["4. 注册 BeanPostProcessor"]
+    D --> E["5. 初始化 MessageSource"]
+    E --> F["6. 初始化 ApplicationEventMulticaster"]
+    F --> G["7. 提前发布 ContextRefreshedEvent"]
+    G --> H["8. 实例化剩余单例 Bean"]
+    H --> I["9. 发布 ContextRefreshedEvent"]
+    I --> J["10. 容器就绪 ✅"]
+```
+
+**关键节点说明**：
+
+- **第 3 步 `BeanFactoryPostProcessor`**：唯一允许「在 Bean 创建前修改 BeanDefinition」的扩展点。典型应用：`PropertySourcesPlaceholderConfigurer`（解析 `${}` 占位符）、`ConfigurationClassPostProcessor`（解析 `@Configuration` 类）。
+- **第 4 步 `BeanPostProcessor`**：所有 Bean 的统一拦截器（在第 8 步创建 Bean 时生效）。AOP 代理正是这里生成。
+- **第 8 步**才真正创建单例 Bean。
+
+> [!WARNING]
+> 经常被问到的"为什么我的 `@Bean` 方法中调用其他 `@Bean` 方法返回的是同一个对象"——因为 `ConfigurationClassPostProcessor` 在第 3 步对 `@Configuration` 类做了 CGLIB 增强，多次调用会从容器取缓存。这正是 `@Configuration`（full）vs `@Component`（lite）的本质区别。
+
+## ApplicationEvent：容器内的事件机制 {#event}
+
+Spring 自带**观察者模式**实现：业务方发事件，监听器消费。解耦利器。
+
+```java
+// 1) 定义事件
+public class OrderPaidEvent extends ApplicationEvent {
+    private final Long orderId;
+    public OrderPaidEvent(Object source, Long orderId) {
+        super(source);
+        this.orderId = orderId;
+    }
+    public Long getOrderId() { return orderId; }
+}
+
+// 2) 发布事件
+@Service
+public class OrderService {
+    private final ApplicationEventPublisher publisher;
+
+    public void pay(Long orderId) {
+        // ... 支付逻辑
+        publisher.publishEvent(new OrderPaidEvent(this, orderId));
+    }
+}
+
+// 3) 监听事件（同步）
+@Component
+public class NotificationListener {
+    @EventListener
+    public void onOrderPaid(OrderPaidEvent e) {
+        sendEmail(e.getOrderId());
+    }
+}
+
+// 4) 监听事件（异步）
+@Component
+public class LogListener {
+    @Async
+    @EventListener
+    public void onOrderPaid(OrderPaidEvent e) {
+        log.info("订单支付: {}", e.getOrderId());
+    }
+}
+```
+
+**`@TransactionalEventListener`**：让监听器在事务**提交后**才触发（解决"事务还没提交就发消息"导致的下游读到旧数据问题）：
+
+```java
+@TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+public void onPaid(OrderPaidEvent e) {
+    // 事务已提交，下游一定能查到最新数据
+    mq.send("order-paid", e.getOrderId());
+}
+```
+
+> [!TIP]
+> 事件机制 vs MQ：事件在**单进程内**同步/异步派发；MQ 用于**跨进程/跨服务**。能本地用事件解耦的，不要上 MQ——同步性能高、无外部依赖、易追踪。
+
+## Environment 与 Profile 详解 {#environment}
+
+`Environment` 是 Spring 的"环境抽象"，统一管理**配置文件 + 系统环境变量 + JVM 参数**：
+
+```java
+@Component
+public class EnvPrinter implements EnvironmentAware {
+    @Override
+    public void setEnvironment(Environment env) {
+        // 1. 直接取值（按 key）
+        String url = env.getProperty("spring.datasource.url");
+
+        // 2. 类型转换（支持默认值）
+        Integer port = env.getProperty("server.port", Integer.class, 8080);
+        // 或者
+        Integer port2 = env.getProperty("server.port", Integer.class);
+
+        // 3. 占位符解析（与 PropertySourcesPlaceholderConfigurer 配合）
+        String jdbc = env.resolvePlaceholders("${spring.datasource.url}");
+
+        // 4. 判断激活的 profile
+        if (env.acceptsProfiles(Profiles.of("dev", "test"))) {
+            // 仅 dev/test 环境执行
+        }
+    }
+}
+```
+
+**Profile 的加载机制**：
+
+```yaml
+# application.yml
+spring:
+  profiles:
+    active: dev,region-east   # 同时激活多个，按顺序加载
+```
+
+```java
+// 1. 在 application-prod.yml 中定义 prod 专属配置
+// 2. 启动时通过 --spring.profiles.active=prod 激活
+// 3. 同一 key 在多个 profile 中定义，后加载的覆盖先加载的
+```
+
+## 国际化 MessageSource {#i18n}
+
+容器内置国际化能力。资源文件命名 `messages_语言_地区.properties`：
+
+```properties
+# src/main/resources/messages.properties（默认）
+greeting=Hello
+
+# src/main/resources/messages_zh_CN.properties
+greeting=你好
+
+# src/main/resources/messages_ja.properties
+greeting=こんにちは
+```
+
+```java
+@Autowired
+private MessageSource messageSource;
+
+public String greet() {
+    Locale locale = LocaleContextHolder.getLocale();   // 由请求头 Accept-Language 决定
+    return messageSource.getMessage("greeting", null, locale);
+}
+```
+
+在 Spring Boot 中，`spring.messages.basename=messages,i18n/messages` 指定资源文件位置。
+
+## BeanFactoryPostProcessor：修改 BeanDefinition {#bfpp}
+
+`BeanFactoryPostProcessor`（BFPP）是**容器启动阶段**的扩展点，能在所有 Bean 实例化之前修改 BeanDefinition。最经典的应用就是 MyBatis-Spring 扫描 Mapper 接口注册为 Bean：
+
+```java
+@Component
+public class MapperScannerConfigurer implements BeanFactoryPostProcessor {
+    @Override
+    public void postProcessBeanFactory(ConfigurableListableBeanFactory bf) {
+        // 扫描 com.example.mapper 包下所有接口，生成 BeanDefinition 注册到容器
+        ClassPathScanningCandidateComponentProvider scanner = new ClassPathScanningCandidateComponentProvider(false);
+        scanner.addIncludeFilter(new AnnotationTypeFilter(Mapper.class));
+        Set<BeanDefinition> candidates = scanner.findCandidateComponents("com.example.mapper");
+        for (BeanDefinition bd : candidates) {
+            ((BeanDefinitionRegistry) bf).registerBeanDefinition(
+                bd.getBeanClassName(), bd);
+        }
+    }
+}
+```
+
+**与 `BeanPostProcessor` 的区别**：
+
+| 扩展点 | 时机 | 作用对象 |
+|--------|------|----------|
+| `BeanFactoryPostProcessor` | 所有 Bean **创建前** | `BeanDefinition`（元数据） |
+| `BeanPostProcessor` | 每个 Bean **创建前后** | Bean 实例本身 |
+
+## 小结（升级版） {#summary-updated}
+
+IoC/DI 把「谁创建对象、谁装配依赖」的控制权从业务代码反转给了容器，是 Spring 解耦与可测试性的根基。本章深入了多个进阶主题：
+
+- **BeanDefinition**：容器持有的是"Bean 的定义信息"，按定义创建对象。
+- **FactoryBean**：特殊 Bean，"生产"其他对象；用 `&beanName` 拿到工厂本身。
+- **ApplicationContext 初始化 10 步**：环境准备 → 加载定义 → BFPP → 注册 BPP → 实例化单例 → 事件广播。
+- **ApplicationEvent**：容器内观察者模式，`@TransactionalEventListener` 在事务提交后触发。
+- **Environment**：统一管理配置 + Profile + 占位符。
+- **MessageSource**：国际化支持。
+- **BeanFactoryPostProcessor**：唯一在 Bean 创建前修改定义的扩展点（MyBatis Mapper 扫描的原理）。
+
+下一章进入 AOP——它依赖容器为你「悄悄」生成代理对象。

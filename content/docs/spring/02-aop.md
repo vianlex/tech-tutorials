@@ -1,7 +1,7 @@
 ---
 title: 第二章 AOP 面向切面编程
 linkTitle: AOP 切面编程
-description: Spring AOP 的代理原理、切点表达式、通知类型与自调用问题，结合事务与日志等实战场景
+description: Spring AOP 的代理原理、完整切点指示器、通知类型、自调用问题、织入时机、引介增强与 AspectJ 对比
 weight: 12
 ---
 
@@ -262,3 +262,231 @@ public class UserService {
 ## 小结 {#summary}
 
 Spring AOP 在运行时为 Bean 生成（默认 CGLIB）代理，将横切逻辑织入切点匹配的方法；掌握切点表达式、通知顺序与「自调用失效」三大要点，才能把日志、事务、权限等切面写对、写好。下一章学习 Spring MVC——它正是建立在 IoC 与 AOP 之上的 Web 层。
+
+## 完整切点指示器详解 {#pointcut-designators}
+
+Spring AOP 支持 9 种切点指示器（Pointcut Designators, PCD），分两类：**execution 家族**（基于方法签名）+ **args 家族**（基于运行时类型）。合理组合可以表达几乎任意复杂规则。
+
+### execution：方法签名匹配（最强大）
+
+完整语法（所有段都可省略）：
+
+```text
+execution(
+    [@注解]    // 可选：方法级注解
+    [修饰符]    // 可选：public/protected
+    返回类型    // 必填
+    [包名.类名.]方法名(参数) [throws 异常]
+)
+```
+
+实战模板：
+
+```java
+// 1. 匹配任意 public 方法
+@Pointcut("execution(public * *(..))")
+public void anyPublic() {}
+
+// 2. 匹配某包下任意方法（含子包）
+@Pointcut("execution(* com.example.service..*.*(..))")
+public void inService() {}
+
+// 3. 匹配以 save 开头的方法
+@Pointcut("execution(* com.example..*.save*(..))")
+public void saveMethods() {}
+
+// 4. 匹配特定参数类型
+@Pointcut("execution(* com.example.service.*.*(Long, String))")
+public void specificArgs() {}
+
+// 5. 匹配带某注解的方法
+@Pointcut("execution(* com.example..*.*(..)) && @annotation(com.example.anno.Loggable)")
+public void loggableMethods() {}
+```
+
+### @annotation：按方法注解匹配（最实用）
+
+```java
+@Pointcut("@annotation(com.example.anno.Loggable)")
+public void loggable() {}
+```
+
+**优势**：业务代码用 `@Loggable` 显式标记，比按"包路径"匹配更可控；重构路径时切面不用改。
+
+### within：按类所在包/类匹配（粗粒度）
+
+```java
+// com.example.service 包下所有类的所有方法（性能比 execution 略快）
+@Pointcut("within(com.example.service..*)")
+public void inService() {}
+
+// 某个具体类
+@Pointcut("within(com.example.service.OrderService)")
+public void inOrderService() {}
+```
+
+### bean：按 Bean 名称匹配（Spring 独有）
+
+```java
+@Pointcut("bean(orderService)")
+public void orderServiceMethods() {}
+
+// Bean 名称通配
+@Pointcut("bean(*Service)")
+public void allServiceMethods() {}
+```
+
+> [!TIP]
+> `bean` 指示器是 Spring 特有（AspectJ 没有），适合"按 Bean 切"，尤其在配置文件里需要临时给某些 Bean 加增强时。
+
+### @within / @target / @args：类级注解匹配
+
+```java
+// @within：方法所在类标了某注解（@Target(ElementType.TYPE)）
+@Pointcut("@within(com.example.anno.Service)")
+public void inServiceClass() {}
+
+// @target：运行时目标对象标了某注解（注意运行时才判断）
+@Pointcut("@target(com.example.anno.Auditable)")
+public void onAuditableInstance() {}
+
+// @args：方法参数类型标了某注解
+@Pointcut("@args(com.example.anno.Validated)")
+public void validatedArgs() {}
+```
+
+### this / target：代理 vs 目标对象
+
+```java
+// this：当前调用方法的对象（AOP 代理）类型
+@Pointcut("this(com.example.service.UserService)")
+public void proxyIsUserService() {}
+
+// target：目标对象（被代理的真实对象）类型
+@Pointcut("target(com.example.service.UserService)")
+public void targetIsUserService() {}
+```
+
+绝大多数情况两者无差别，但在 **JDK 代理 vs CGLIB 代理混用** 时有微妙差异（如目标对象未实现接口）。
+
+### args：按运行时参数类型匹配
+
+```java
+// 任意以 String 为第一个参数的方法
+@Pointcut("args(String, ..)")
+public void firstArgIsString() {}
+```
+
+**vs execution 中的参数写法**：execution 是**编译期签名匹配**，args 是**运行时类型匹配**。对带泛型的方法要用 args。
+
+### 组合使用：完整示例
+
+```java
+@Aspect
+@Component
+public class RepositoryAspect {
+
+    // 匹配 "service 包下，所有类，所有方法，但 NOT 标了 @Loggable 的方法"
+    @Pointcut("execution(* com.example.service..*.*(..)) "
+            + "&& !@annotation(com.example.anno.Loggable)")
+    public void serviceLayerButNotLogged() {}
+
+    // 匹配 "以 Service/ServiceImpl 结尾的 Bean 的所有方法"
+    @Pointcut("bean(*Service) || bean(*ServiceImpl)")
+    public void allServices() {}
+
+    // 上面定义过的切点可被通知引用
+    @Around("serviceLayerButNotLogged()")
+    public Object around(ProceedingJoinPoint pjp) throws Throwable {
+        // ...
+    }
+}
+```
+
+## 引介增强 @DeclareParents {#declare-parents}
+
+**引介（Introduction）** 让 AOP 不仅能"增强现有方法"，还能**给目标类动态添加新接口实现**：
+
+```java
+// 1. 定义要"加"给目标类的接口
+public interface Auditable {
+    void audit(String action);
+}
+
+@Component
+public class DefaultAuditable implements Auditable {
+    @Override public void audit(String action) {
+        log.info("审计: {}", action);
+    }
+}
+
+// 2. 用 @DeclareParents 把接口"加"给所有 Service 包下的类
+@Aspect
+@Component
+public class AuditableIntroduction {
+
+    @DeclareParents(
+        value = "com.example.service..*",
+        defaultImpl = DefaultAuditable.class)
+    public Auditable auditable;   // 类型 = 要加的接口
+
+    // 之后任意该包的 Bean 都可以强转为 Auditable：
+    // Auditable auditable = (Auditable) orderService;
+    // auditable.audit("创建订单");
+}
+```
+
+> [!NOTE]
+> 引介增强的实现机制：代理对象在 CGLIB/JDK 代理生成时，让它多实现一个 `Auditable` 接口（接口代理很容易实现多接口）。但**字段类本身没有真的修改**——只是在代理层"假装"实现了接口。这是引介与继承的本质区别。
+
+## 织入时机对比：Spring AOP vs AspectJ {#weaving-timing}
+
+AOP 的核心是「织入」——把切面逻辑缝进目标代码。三种织入时机性能、可维护性差异显著：
+
+```mermaid
+flowchart LR
+    A["源代码"] --> B["编译期织入<br/>AspectJ 编译器"]
+    A --> C["类加载期织入<br/>AspectJ LTW"]
+    A --> D["运行时织入<br/>Spring AOP"]
+    B --> E["字节码增强"]
+    C --> E
+    D --> F["动态代理"]
+    E --> G["运行"]
+    F --> G
+```
+
+| 维度 | 编译期织入（AspectJ） | 类加载期织入（LTW） | 运行时织入（Spring AOP） |
+|------|---------------------|---------------------|------------------------|
+| **时机** | javac 阶段 | 类加载时（JVM 钩子） | 容器创建 Bean 时 |
+| **侵入性** | 需要专门的编译器 | 需要 javaagent | 无（应用层） |
+| **性能** | 启动时一次性开销，运行零开销 | 启动时一次性开销，运行零开销 | 每次调用都有反射/代理开销 |
+| **支持范围** | 任意连接点（字段、构造器、静态方法） | 仅方法执行 | 仅方法执行 |
+| **典型场景** | 高性能需求、需切入非 Spring Bean | 旧应用 AOP 化 | **绝大多数 Spring 项目** |
+| **生态** | 独立语言/工具链 | AspectJ 框架 | 与 Spring 无缝 |
+
+> [!TIP]
+> **绝大多数项目用 Spring AOP 就够**——无需引入 AspectJ 工具链。只有以下场景考虑 AspectJ：①需要切入**非 Spring 管理的对象**（如 JDK 内部类）；②需要切入**字段访问/构造器**；③性能极度敏感、连代理开销都不能容忍。Spring 提供了 `@EnableAspectJAutoProxy` + AspectJ 语法支持，但不启用 LTW 时仍走运行时代理。
+
+## Spring AOP 不支持的能力 {#limitations}
+
+明确 AOP 的边界很重要。**以下场景 Spring AOP 织入不了**：
+
+- ❌ **字段访问拦截**（getter/setter）—— AspectJ 支持。
+- ❌ **构造器调用拦截**—— AspectJ 支持。
+- ❌ **static 方法**—— Spring AOP 不支持（无代理）。
+- ❌ **同类内部自调用**——见上节。
+- ❌ **final 类/方法**—— CGLIB 无法继承。
+- ❌ **非 Spring 容器管理的对象**——根本没有代理。
+
+如果你的需求命中以上任意一项，要么**换思路**（如字段拦截改用事件驱动），要么**启用 AspectJ LTW**（`spring-instrument` + `javaagent`）。
+
+## 小结（升级版） {#summary-updated}
+
+Spring AOP 在运行时为 Bean 生成（默认 CGLIB）代理。本章进阶内容：
+
+- **9 种切点指示器**完整讲解：execution（签名）/ within（包类）/ this & target（代理对象）/ args（运行时参数）/ @annotation（方法注解）/ @within / @target / @args（类级注解）/ bean（Spring 独有）。
+- **引介增强 `@DeclareParents`**：在代理层给类动态添加接口实现。
+- **三种织入时机对比**：编译期（AspectJ 编译器）/ 类加载期（LTW）/ 运行时（Spring AOP），按需选择。
+- **Spring AOP 不支持的能力**：字段/构造器拦截、static 方法、final 类/方法、非容器管理对象——遇到这些场景要么改思路，要么启用 AspectJ。
+
+下一章学习 Spring MVC——它正是建立在 IoC 与 AOP 之上的 Web 层。

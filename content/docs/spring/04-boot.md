@@ -1,7 +1,7 @@
 ---
 title: 第四章 Spring Boot 快速上手
 linkTitle: Spring Boot
-description: Spring Boot 自动配置原理、起步依赖、配置体系、内嵌服务器与 Actuator 健康检查
+description: Spring Boot 自动配置原理、起步依赖、配置体系、内嵌服务器与 Actuator、Spring Boot 3 新特性、Native Image、配置元数据、优雅停机
 weight: 14
 ---
 
@@ -312,3 +312,284 @@ management:
 ## 小结 {#summary}
 
 Spring Boot 用「自动配置 + 起步依赖 + 外部化配置」把 Spring 的复杂度封装为开箱即用，并通过内嵌服务器与 Actuator 补齐运行与运维能力。理解了自动配置原理，你也能写出自己的 starter。下一章学习数据访问与事务——这是企业应用真正落地持久化与一致性的关键。
+
+## Spring Boot 3.x 重大变化与新特性 {#spring-boot-3}
+
+Spring Boot 3.x（搭配 Spring Framework 6.x）是当下主流，了解这一代的特性非常必要。
+
+### 与 2.x 的核心差异
+
+```text
+┌──────────────────────────────────────────────────────────┐
+│ Spring Boot 2.x           │ Spring Boot 3.x             │
+├──────────────────────────────────────────────────────────┤
+│ Java 8+                   │ Java 17+                    │
+│ javax.servlet / jpa       │ jakarta.servlet / jpa       │
+│ spring.factories 自动配置 │ imports 文件                │
+│ Logback 1.2               │ Logback 1.4                 │
+│ HikariCP 4.x              │ HikariCP 5.x                │
+│ Spring Security 5.x       │ Spring Security 6.x         │
+│ 支持 WebFlux              │ WebFlux 增强 + RSocket      │
+└──────────────────────────────────────────────────────────┘
+```
+
+**命名空间迁移**是最大破坏性变更：所有 `javax.*` 替换为 `jakarta.*`。Maven 全局替换：
+
+```bash
+# 老项目升级时
+find . -name "*.java" -exec sed -i 's/javax\./jakarta\./g' {} +
+```
+
+### GraalVM Native Image
+
+Spring Boot 3 与 GraalVM 深度集成，能把应用编译成**原生可执行文件**：
+
+```bash
+# 启动比 JVM 快 10-100 倍，内存占用降至 1/10
+mvn -Pnative native:compile
+./target/demo
+```
+
+```xml
+<build>
+    <plugins>
+        <plugin>
+            <groupId>org.graalvm.buildtools</groupId>
+            <artifactId>native-maven-plugin</artifactId>
+        </plugin>
+    </plugins>
+</build>
+```
+
+适用场景：Serverless、冷启动敏感、内存受限的边缘计算。**注意事项**：反射、动态代理、classpath 扫描等需要显式配置（多数已自动处理，少数需要 `reflect-config.json`）。
+
+### AOT（Ahead-of-Time）处理
+
+Spring 6 引入的 AOT 引擎对 Bean 进行**预先解析**，把运行时的反射调用转成直接的 Java 调用，是 Native Image 能工作的关键：
+
+```java
+// 由 AOT 阶段生成的代码（自动）
+RuntimeHints hints = RuntimeHints.register();
+hints.reflection().registerType(User.class, MemberCategory.INVOKE_DECLARED_METHODS);
+```
+
+## 配置元数据 spring-configuration-metadata.json {#config-metadata}
+
+为 `@ConfigurationProperties` 自动生成 IDE 提示（输入即提示、自动补全、文档悬浮）：
+
+```xml
+<!-- 引入处理器 -->
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-configuration-processor</artifactId>
+    <optional>true</optional>
+</dependency>
+```
+
+```java
+@ConfigurationProperties(prefix = "app.cache")
+public class CacheProperties {
+
+    /** 缓存 TTL（秒） */
+    private int ttl = 300;
+
+    /** 最大缓存条目 */
+    private int maxSize = 10_000;
+
+    // getters / setters
+}
+```
+
+构建后 `META-INF/spring-configuration-metadata.json` 自动生成，`application.yml` 写 `app.cache.ttl` 就有提示了。
+
+```yaml
+# 写配置时 IDE 自动补全 + 悬浮文档
+app:
+  cache:
+    ttl: 600
+    max-size: 50000
+```
+
+## 配置文件加密 {#config-encrypt}
+
+生产数据库密码等敏感配置不应明文写在 `application.yml`。**jasypt-spring-boot-starter** 是最常用的加密方案：
+
+```xml
+<dependency>
+    <groupId>com.github.ulisesbocchio</groupId>
+    <artifactId>jasypt-spring-boot-starter</artifactId>
+    <version>3.0.5</version>
+</dependency>
+```
+
+```yaml
+jasypt:
+  encryptor:
+    password: ${JASYPT_PASSWORD}    # 主密码从环境变量读，不入库
+
+spring:
+  datasource:
+    password: ENC(AbCdEf123...加密结果...)
+```
+
+加密过程（开发期执行一次）：
+
+```java
+StringPool stringEncryptor = new BasicStringEncryptor();
+stringEncryptor.setPassword("my-secret-key");   // 与 jasypt.encryptor.password 一致
+String encrypted = stringEncryptor.encrypt("real-db-password");
+// 输出 ENC(AbCdEf123...) 填到配置文件
+```
+
+> [!TIP]
+> 生产环境 `JASYPT_PASSWORD` 通过 K8s Secret、Vault、AWS Secrets Manager 等注入，避免硬编码在镜像或仓库。
+
+## 启动监听器与 Runner {#startup-listener}
+
+`ApplicationListener` 监听容器生命周期事件：
+
+```java
+@Component
+public class StartupLogger implements ApplicationListener<ApplicationReadyEvent> {
+    @Override
+    public void onApplicationEvent(ApplicationReadyEvent event) {
+        log.info("应用启动完成，耗时 {}ms", 
+                 event.getApplicationContext().getStartupDate().getTime() - 
+                 ManagementFactory.getRuntimeMXBean().getStartTime());
+    }
+}
+```
+
+**常用事件**：
+
+| 事件 | 时机 |
+|------|------|
+| `ApplicationStartingEvent` | 最早：上下文创建前 |
+| `ApplicationEnvironmentPreparedEvent` | 环境准备好 |
+| `ApplicationPreparedEvent` | Bean 定义加载完 |
+| `ContextRefreshedEvent` | 容器刷新完成（Bean 创建完） |
+| `ApplicationStartedEvent` | Runner 执行前 |
+| `ApplicationReadyEvent` | 应用就绪，可对外服务 |
+| `ContextClosedEvent` | 容器关闭中 |
+| `ContextStoppedEvent` / `ContextStoppedEvent` | 容器停止 |
+
+`ApplicationRunner` / `CommandLineRunner` 在应用就绪后执行：
+
+```java
+@Component
+@Order(1)
+public class CacheWarmerRunner implements ApplicationRunner {
+    @Override
+    public void run(ApplicationArguments args) throws Exception {
+        // 预热缓存、加载字典、初始化定时任务等
+    }
+}
+```
+
+## 优雅停机 {#graceful-shutdown}
+
+容器关闭时，**正在处理的请求怎么办？** 默认会强制中断，导致用户看到 502。
+
+```yaml
+server:
+  shutdown: graceful                # 启用优雅停机
+
+spring:
+  lifecycle:
+    timeout-per-shutdown-phase: 30s  # 最多等待 30s
+```
+
+```mermaid
+flowchart LR
+    A["收到 SIGTERM"] --> B["停止接收新请求"]
+    B --> C["等待正在处理的请求完成<br/>（最多 30s）"]
+    C --> D{"完成？"}
+    D -->|"是"| E["关闭线程池<br/>关闭容器"]
+    D -->|"否（超时）"| E
+```
+
+> [!TIP]
+> Kubernetes 部署时配合 `terminationGracePeriodSeconds: 35`（比 Spring 的 30s 多 5s），确保 Pod 被杀前 Spring 优雅退出。
+
+## 启动优化：延迟初始化与运行期探针 {#startup-opt}
+
+### 延迟初始化
+
+```yaml
+spring:
+  main:
+    lazy-initialization: true        # 所有 Bean 懒加载
+```
+
+**好处**：启动更快。**坏处**：把启动期错误延迟到第一次访问；隐式依赖更难发现（要启用再用）。**生产慎用**——除非启动时间真的成为瓶颈。
+
+### 启动耗时探针
+
+```yaml
+spring:
+  application:
+    admin:
+      enabled: true                  # 开启 Spring Boot Admin 端点
+```
+
+或用 **Spring Boot 3 + Actuator 的 `startup` 端点**：
+
+```yaml
+management:
+  endpoints:
+    web:
+      exposure:
+        include: startup
+  endpoint:
+    startup:
+      enabled: true
+```
+
+访问 `/actuator/startup` 拿到每个 Bean 的初始化耗时，定位启动慢的根因。
+
+## Spring Modulith：模块化单体 {#modulith}
+
+Spring Boot 3 引入的 **Modulith** 帮你把单体应用按"业务包"组织成模块，模块边界通过编译期 + 运行期双重校验：
+
+```java
+// com.example.orders.OrderModule
+@ApplicationModule(
+    displayName = "订单模块",
+    allowedDependencies = {"customers", "invoices"}  // 只允许依赖这俩模块
+)
+package com.example.orders;
+```
+
+```java
+// 在订单模块内访问客户模块：通过 Modulith API 显式暴露
+public class OrderService {
+    private final CustomerFacade customer;   // 门面，只暴露必要的 API
+
+    public OrderService(CustomerFacade customer) {
+        this.customer = customer;
+    }
+}
+```
+
+```bash
+# 启动时 Modulith 会校验模块依赖图
+mvn test -Dtest=ModulithTests
+```
+
+适用：**业务复杂、团队扩张** 的单体应用——既享受单体部署的简单，又保留模块边界的纪律。
+
+## 小结（升级版） {#summary-updated}
+
+Spring Boot 用「自动配置 + 起步依赖 + 外部化配置」把 Spring 的复杂度封装为开箱即用。本章进阶内容：
+
+- **Spring Boot 3.x 重大变化**：Java 17+、jakarta 命名空间、imports 取代 spring.factories。
+- **GraalVM Native Image**：编译成原生二进制，启动毫秒级、内存骤降。
+- **AOT 处理**：把运行期反射转成编译期生成代码，是 Native 的基础。
+- **配置元数据**：configuration-processor 生成 IDE 提示。
+- **配置文件加密**：jasypt + 环境变量注入主密钥。
+- **启动监听器**：7 类生命周期事件 + Runner 接口。
+- **优雅停机**：`shutdown: graceful` + lifecycle timeout，避免请求被中断。
+- **启动优化**：延迟初始化的利弊、Actuator startup 端点。
+- **Spring Modulith**：模块化单体的工程实践。
+
+下一章学习数据访问与事务——这是企业应用真正落地持久化与一致性的关键。
