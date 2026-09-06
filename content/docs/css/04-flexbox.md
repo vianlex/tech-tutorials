@@ -2,7 +2,7 @@
 title: 第四章：Flex 布局详解
 linkTitle: Flex 布局
 description: 主轴与交叉轴、容器六大属性、项目属性、常见布局实战
-weight: 179
+weight: 180
 ---
 
 # Flex 布局详解

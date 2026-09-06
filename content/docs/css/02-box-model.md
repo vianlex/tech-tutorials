@@ -2,7 +2,7 @@
 title: 第二章：盒子模型详解
 linkTitle: 盒子模型
 description: content/padding/border/margin 四层结构、box-sizing、外边距合并、width/height 计算
-weight: 177
+weight: 178
 ---
 
 # 盒子模型详解

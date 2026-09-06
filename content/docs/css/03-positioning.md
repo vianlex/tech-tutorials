@@ -2,7 +2,7 @@
 title: 第三章：定位与文档流
 linkTitle: 定位与文档流
 description: 文档流、position 五种取值、absolute 与 relative、z-index 与层叠上下文
-weight: 178
+weight: 179
 ---
 
 # 定位与文档流

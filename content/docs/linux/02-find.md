@@ -2,7 +2,7 @@
 title: 第二章：find 文件查找
 linkTitle: find 文件查找
 description: 按名称/类型/大小/时间查找文件、执行动作、常用组合场景
-weight: 182
+weight: 183
 ---
 
 # find 文件查找

@@ -2,7 +2,7 @@
 title: 第三章 联合、交叉与类型收窄
 linkTitle: 联合、交叉与收窄
 description: 联合类型与交叉类型、字面量类型、类型收窄（typeof/in/instanceof）、可辨识联合、类型断言
-weight: 173
+weight: 174
 ---
 
 # 联合、交叉与类型收窄

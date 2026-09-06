@@ -2,7 +2,7 @@
 title: 第三章：grep 文本检索
 linkTitle: grep 文本检索
 description: 正则匹配、上下文、递归搜索、反向匹配、常用选项
-weight: 183
+weight: 184
 ---
 
 # grep 文本检索

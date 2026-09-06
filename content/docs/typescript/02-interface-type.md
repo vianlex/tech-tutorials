@@ -2,7 +2,7 @@
 title: 第二章 接口与类型别名
 linkTitle: 接口与类型别名
 description: interface 与 type 的区别与选择、可选属性、只读属性、函数类型、索引签名、接口继承与交叉
-weight: 172
+weight: 173
 ---
 
 # 接口与类型别名

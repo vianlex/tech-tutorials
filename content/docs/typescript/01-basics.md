@@ -2,7 +2,7 @@
 title: 第一章 基础与类型注解
 linkTitle: 基础与类型注解
 description: TypeScript 安装与编译、基本类型、类型注解与推断、any/unknown/never、结构化类型检查核心概念
-weight: 171
+weight: 172
 ---
 
 # 基础与类型注解

@@ -2,7 +2,7 @@
 title: 第五章：mount 磁盘挂载
 linkTitle: mount 磁盘挂载
 description: 挂载与卸载、fstab 自动挂载、常见文件系统与排错
-weight: 185
+weight: 186
 ---
 
 # mount 磁盘挂载

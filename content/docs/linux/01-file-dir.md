@@ -2,7 +2,7 @@
 title: 第一章：文件与目录操作
 linkTitle: 文件与目录操作
 description: ls/cd/cp/mv/rm 等基础命令、权限管理 chmod/chown、软硬链接
-weight: 181
+weight: 182
 ---
 
 # 文件与目录操作

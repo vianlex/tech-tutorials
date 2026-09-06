@@ -2,7 +2,7 @@
 title: 第四章 泛型与工具类型
 linkTitle: 泛型与工具类型
 description: 泛型函数与约束、泛型接口、内置工具类型（Partial/Required/Pick/Omit/Record/ReturnType）、类型守卫
-weight: 174
+weight: 175
 ---
 
 # 泛型与工具类型

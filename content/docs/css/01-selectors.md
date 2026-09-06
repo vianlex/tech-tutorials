@@ -2,7 +2,7 @@
 title: 第一章：选择器与层叠
 linkTitle: 选择器与层叠
 description: CSS 选择器类型、优先级（specificity）计算、层叠与继承规则
-weight: 176
+weight: 177
 ---
 
 # 选择器与层叠

@@ -24,7 +24,7 @@ cards:
     - { name: Spring 教程, icon: fa-brands fa-java, desc: Java 企业级框架，IoC、AOP、Spring Boot、Spring MVC, url: docs/spring/ }
     - { name: CSS 教程, icon: fa-brands fa-css3-alt, desc: 选择器、盒模型、Flex 布局、响应式设计, url: docs/css/ }
     - { name: JavaScript 教程, icon: fa-brands fa-js, desc: 前端核心语言，语法、ES6+、DOM、异步编程, url: docs/javascript/ }
-    - { name: React 教程, icon: fa-brands fa-react, desc: 组件化 UI 库，Hooks、状态管理、React 19 新特性, url: docs/react/ }
+    - { name: React 教程, icon: fa-brands fa-react, desc: 组件化 UI 库，Hooks、组件间通信、React 19 新特性, url: docs/react/ }
     - { name: TypeScript 教程, icon: fa-solid fa-cube, desc: JS 超集，结构化类型检查、泛型、工具类型, url: docs/typescript/ }
     - { name: Golang 教程, icon: fa-brands fa-golang, desc: Go 语言，并发、标准库、工程实践, url: docs/golang/ }
     - { name: Python 教程, icon: fa-brands fa-python, desc: 语法、数据结构与字符串、函数、面向对象与进阶, url: docs/python/ }

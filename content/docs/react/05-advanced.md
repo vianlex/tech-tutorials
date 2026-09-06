@@ -248,4 +248,4 @@ function Page() {
 
 ## 小结 {#summary}
 
-本章完成了 React 的进阶学习：性能三件套（`memo`/`useMemo`/`useCallback`）、并发 Hook（`useTransition`/`useDeferredValue`），以及 React 19 的核心新特性——`use()` 读取资源、Actions/`useActionState` 简化表单、`useOptimistic` 乐观更新、`useFormStatus`、ref 作为 prop、原生元数据。至此五章教程结束，从基础到进阶，覆盖了现代 React 开发的核心知识体系。
+本章完成了 React 的进阶学习：性能三件套（`memo`/`useMemo`/`useCallback`）、并发 Hook（`useTransition`/`useDeferredValue`），以及 React 19 的核心新特性——`use()` 读取资源、Actions/`useActionState` 简化表单、`useOptimistic` 乐观更新、`useFormStatus`、ref 作为 prop、原生元数据。下一章系统梳理组件间状态与值传递的所有方案。

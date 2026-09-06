@@ -2,7 +2,7 @@
 title: 第四章：journalctl 日志分析
 linkTitle: journalctl 日志分析
 description: 查看 systemd 服务日志、时间过滤、实时跟踪、按优先级筛选
-weight: 184
+weight: 185
 ---
 
 # journalctl 日志分析

@@ -2,7 +2,7 @@
 title: 第五章 高级类型与工程实践
 linkTitle: 高级类型与工程实践
 description: keyof 与索引访问、映射类型、条件类型、枚举、类、tsconfig 配置与最佳实践
-weight: 175
+weight: 176
 ---
 
 # 高级类型与工程实践
