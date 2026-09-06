@@ -25,31 +25,22 @@
    git push -u origin main
    ```
 
-## 三、Cloudflare Pages 配置（二选一）
+## 三、Cloudflare Pages 配置（Git 集成，自动部署）
 
-### 方式 A：Git 集成（推荐，自动部署）
+> 本仓库**统一使用 Cloudflare Git 集成自动部署**，不再使用 GitHub Actions。
 
 1. 登录 [Cloudflare Dashboard](https://dash.cloudflare.com/)。
-2. 左侧选择 **Workers & Pages → Create → Pages → Connect to Git**。
-3. 授权 GitHub，选择 `learn-blog` 仓库。
+2. 左侧选择 **Workers & Pages → `tech-tutorials` 项目 → Settings → Build & deployments**。
+3. 确认已通过 **Connect to Git** 连接 GitHub 仓库 `vianlex/tech-tutorials`。
 4. 构建配置：
-   - **Framework preset**：Hugo
    - **Build command**：`hugo --gc --minify`
    - **Build output directory**：`public`
-   - **环境变量**：`HUGO_VERSION` = `0.165.0`
-5. 点击 **Save and Deploy**，等待首次构建完成。
+   - **环境变量（关键）**：`HUGO_VERSION` = `0.165.0`
 
-> 用 Git 集成方式时，`.github/workflows/cloudflare-pages.yaml` 可删除（避免重复部署）。
+> [!IMPORTANT]
+> 必须显式设置 `HUGO_VERSION=0.165.0` 环境变量。Cloudflare 默认用的是旧版 Hugo（0.147.7），而 `docs-theme` 主题要求 Hugo ≥ 0.160.1，旧版会报 `failed to load translations: unsupported file format bool` 导致构建失败。
 
-### 方式 B：GitHub Actions + Wrangler Direct Upload
-
-1. 在 Cloudflare 获取凭据：
-   - **Account ID**：Dashboard 首页右侧，或 `workers.dev` 子域设置页。
-   - **API Token**：My Profile → API Tokens → Create Token → 选「Cloudflare Pages: Edit」模板。
-2. 在 GitHub 仓库 **Settings → Secrets and variables → Actions** 添加两个 secret：
-   - `CLOUDFLARE_ACCOUNT_ID`
-   - `CLOUDFLARE_API_TOKEN`
-3. 推送 `main` 分支，workflow 会自动构建并部署。
+5. 推送 `main` 分支，Cloudflare 会自动拉取并构建部署。
 
 ## 四、绑定自定义域名 `amias.icu`
 
