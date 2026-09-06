@@ -22,6 +22,7 @@ weight: 20
 - [Uv 教程](/docs/uv/)
 - [FastAPI 教程](/docs/fastapi/)
 - [Node.js 教程](/docs/nodejs/)
+- [Node 包管理教程](/docs/node-pkg-manager/)
 - [Git 使用教程](/docs/git/)
 - [Pi Agent 使用教程](/docs/pi-agent/)
 - [Claude Code 使用教程](/docs/claude-code/)
