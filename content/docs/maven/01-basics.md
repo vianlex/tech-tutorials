@@ -113,22 +113,73 @@ flowchart LR
 
 Maven 有两份配置：项目级 `pom.xml`（随项目走），用户级 `settings.xml`（本机环境，默认 `~/.m2/settings.xml`）。后者主要配**镜像、私服认证、本地仓库路径、profile**。
 
-### 配置国内镜像（加速） {#mirror}
+### 镜像 mirror 详解 {#mirror}
 
-中央仓库在国外，国内开发常配阿里云镜像：
+**镜像（mirror）** 是对某个远程仓库的「替代地址」：Maven 原本要去中央仓库拉依赖，通过 mirror 可以把请求**转发到一个更近、更快的仓库**（国内常用阿里云镜像）。
+
+```mermaid
+flowchart LR
+    M["Maven 构建"] -->|"请求 central"| C["中央仓库（国外，慢）"]
+    M -->|"mirror 转发"| A["阿里云镜像（国内，快）"]
+    A -.->|"代理"| C
+```
+
+#### 基本配置
 
 ```xml
 <settings>
     <mirrors>
         <mirror>
-            <id>aliyun</id>
-            <name>Aliyun Maven</name>
+            <id>aliyun</id>                                    <!-- 唯一标识 -->
+            <name>Aliyun Maven</name>                          <!-- 描述，可随意 -->
             <url>https://maven.aliyun.com/repository/public</url>
-            <mirrorOf>central</mirrorOf>   <!-- 拦截所有对 central 的请求 -->
+            <mirrorOf>central</mirrorOf>                       <!-- 拦截哪些仓库 -->
         </mirror>
     </mirrors>
 </settings>
 ```
+
+#### mirrorOf：拦截规则的灵魂
+
+`mirrorOf` 决定**哪些仓库的请求被这个镜像接管**，取值很灵活：
+
+| 写法 | 含义 |
+| --- | --- |
+| `central` | 只拦截中央仓库（最常用） |
+| `*` | 拦截**所有**仓库（含私服，慎用） |
+| `external:*` | 拦截除 localhost/文件路径外的所有远程仓库 |
+| `*,!repo1` | 拦截所有，但排除 `repo1` |
+| `repo1,repo2` | 只拦截这两个仓库 |
+
+```xml
+<!-- 拦截所有远程仓库，但放行公司私服 -->
+<mirror>
+    <id>aliyun</id>
+    <url>https://maven.aliyun.com/repository/public</url>
+    <mirrorOf>*,!my-nexus</mirrorOf>
+</mirror>
+```
+
+#### 常见国内镜像
+
+| 镜像 | URL |
+| --- | --- |
+| 阿里云（推荐） | `https://maven.aliyun.com/repository/public` |
+| 腾讯云 | `https://mirrors.cloud.tencent.com/nexus/repository/maven-public/` |
+| 华为云 | `https://repo.huaweicloud.com/repository/maven/` |
+
+#### 配置位置与作用域
+
+- **全局**：`${MAVEN_HOME}/conf/settings.xml`，对所有用户生效（CI 服务器常用）。
+- **用户级**：`~/.m2/settings.xml`，只对当前用户生效（日常开发常用，优先改这个）。
+
+> 配置镜像后，本地仓库里已有的依赖不受影响；新依赖会优先走镜像地址下载。
+
+#### 常见坑
+
+1. **`mirrorOf` 写 `*` 把私服也拦截了**：公司私服（Nexus）的依赖会被错误转发到公共镜像，导致「找不到私有构件」。要用 `*,!私服id` 排除。
+2. **镜像没有你要的构件**：某些冷门/私有构件镜像没同步，会下载失败。此时要么换 `mirrorOf` 精确匹配，要么临时 `-Dmaven.repo.remote` 指定。
+3. **配置改了不生效**：确认改的是 Maven 实际读取的那份 `settings.xml`（可用 `mvn help:effective-settings` 查看合并后的生效配置）。
 
 ### 配置私服认证 {#server}
 
