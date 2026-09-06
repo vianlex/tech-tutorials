@@ -145,7 +145,180 @@ git switch -c develop --track origin/develop
 
 # 将本地已有分支关联远程分支
 git branch --set-upstream-to=origin/develop
+
+# 取消跟踪关系
+git branch --unset-upstream
 ```
+
+## 协议选择：HTTPS vs SSH {#protocol}
+
+两种协议各有适用场景，按需选择：
+
+| 特性 | HTTPS | SSH |
+|------|-------|-----|
+| 防火墙/代理友好 | ✅ 只走 443 端口 | ⚠️ 22 端口常被封 |
+| 凭证方式 | 账号密码 / Token | 公私钥 |
+| 是否需每次输入凭证 | 取决于 credential helper | 配好公钥后无需 |
+| 适合匿名克隆 | ✅ | ❌ |
+| 推荐场景 | 公司内网、CI/CD、有代理环境 | 个人主力机、开源贡献 |
+
+切换协议：
+
+```bash
+# 从 HTTPS 切到 SSH
+git remote set-url origin git@github.com:user/repo.git
+
+# 从 SSH 切到 HTTPS
+git remote set-url origin https://github.com/user/repo.git
+```
+
+## 凭证存储：credential.helper {#credential}
+
+不想每次输密码，把凭证缓存到本地：
+
+```bash
+# 内存缓存（默认 15 分钟）
+git config --global credential.helper cache
+
+# 内存缓存 1 小时
+git config --global credential.helper 'cache --timeout=3600'
+
+# 永久存储到磁盘（明文，注意权限）
+git config --global credential.helper store
+
+# macOS 钥匙串（推荐）
+git config --global credential.helper osxkeychain
+
+# Windows 凭据管理器（推荐）
+git config --global credential.helper manager
+
+# Linux GNOME Keyring
+git config --global credential.helper gnome-keyring
+```
+
+> GitHub 已不支持账号密码推送，必须用 **Personal Access Token (PAT)** 替代。把 token 当密码填入凭证管理器即可。
+
+## 强制推送的正确姿势 {#force-push}
+
+`git push --force` 会**无条件覆盖**远端历史，可能把别人的提交一起擦掉。`--force-with-lease` 是更安全的版本：它会先检查远端是不是你预期的状态，不是则拒绝推送。
+
+```bash
+# 危险：覆盖远端历史
+git push --force origin feature/login
+
+# 安全：仅当你本地版本是「远端最新状态」时才允许覆盖
+git push --force-with-lease origin feature/login
+
+# 实际场景：本地 rebase 后推送
+git rebase main
+git push --force-with-lease
+# 如果中间同事推了新提交到同一分支，Git 会拒绝推送并提示
+```
+
+三种强制推送场景的处理建议：
+
+| 场景 | 推荐方式 | 理由 |
+|------|---------|------|
+| 个人分支 rebase 后 | `--force-with-lease` | 安全 |
+| 共享分支重写历史 | **不要做**，改用 revert | 防止覆盖他人 |
+| 已发布 tag 改指向 | 创建新 tag 并删除旧 tag | 不破坏下游 |
+
+## 上游分支与多 remote 协作 {#upstream}
+
+当本地仓库同时关联多个远程（如 fork 模式），需要明确哪个是「上游」、哪个是「自己」：
+
+```bash
+# 查看每个 remote 的角色
+git remote -v
+# origin    git@github.com:you/repo.git      (fetch)
+# origin    git@github.com:you/repo.git      (push)
+# upstream  git@github.com:original/repo.git (fetch)
+# upstream  git@github.com:original/repo.git (push)
+
+# 从 upstream 同步最新代码
+git fetch upstream
+git switch main
+git merge upstream/main                 # 或 git rebase upstream/main
+
+# 推到自己 fork
+git push origin main
+```
+
+`@<remote>` 简写在 Git 2.20+ 可用：
+
+```bash
+git push origin HEAD                     # 推送当前分支到 origin
+git fetch upstream                       # 完整写法
+git fetch                                # 拉取默认 remote 的所有分支
+```
+
+## 代理配置 {#proxy}
+
+公司网络常需要代理才能访问 GitHub：
+
+```bash
+# HTTP 代理（只对本协议生效）
+git config --global http.proxy http://127.0.0.1:7890
+git config --global https.proxy http://127.0.0.1:7890
+
+# SOCKS5 代理
+git config --global http.proxy socks5://127.0.0.1:1080
+
+# 仅对 GitHub 生效（避免代理影响内网仓库）
+git config --global http.https://github.com.proxy http://127.0.0.1:7890
+
+# 取消代理
+git config --global --unset http.proxy
+git config --global --unset https.proxy
+```
+
+SSH 代理需写到 `~/.ssh/config`：
+
+```sshconfig
+Host github.com
+  ProxyCommand nc -v -x 127.0.0.1:7890 %h %p
+```
+
+## PR 完整生命周期 {#pr-lifecycle}
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Dev as 开发者
+    participant Local as 本地仓库
+    participant Remote as 远程仓库
+    participant Rev as 评审者
+    participant CI as CI 系统
+    Dev->>Local: git switch -c feature/x
+    Dev->>Local: 编码 → 多次 commit
+    Dev->>Remote: git push -u origin feature/x
+    Dev->>Remote: 在平台发起 PR
+    Remote->>CI: 触发流水线
+    CI-->>Remote: ✅ / ❌ 检查结果
+    Remote->>Rev: 通知评审
+    Rev->>Remote: 评论 / 提议改动
+    Dev->>Local: 根据反馈继续 commit
+    Dev->>Remote: git push（自动更新 PR）
+    Rev->>Remote: Approve
+    Dev->>Remote: 合并 / 由平台自动合并
+    Dev->>Local: git switch main && git pull
+    Dev->>Local: git branch -d feature/x
+```
+
+PR 标题与描述最佳实践：
+
+- 标题遵循 Conventional Commits：`feat:`, `fix:`, `chore:`, `refactor:`, `docs:` 等
+- 描述里写清楚「背景」「改动」「影响面」「截图/GIF」
+- 关联 Issue：`Closes #123` / `Refs #456`
+- 拆分 PR：单个 PR 改动控制在 300-500 行，便于评审
+
+合并方式选择（GitHub）：
+
+| 合并方式 | 历史形态 | 何时用 |
+|---------|---------|--------|
+| Merge Commit | 保留分支拓扑 | 默认；需要追溯完整历史 |
+| Squash and Merge | 单个合并提交 | 个人 feature 分支；历史简洁 |
+| Rebase and Merge | 线性 | 长期 feature 分支；保持 main 线性 |
 
 ## 小结 {#summary}
 

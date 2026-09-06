@@ -31,7 +31,7 @@ cards:
     - { name: Uv 教程, icon: fa-solid fa-rocket, desc: Rust 打造的极速 Python 包管理与项目管理工具, url: docs/uv/ }
     - { name: FastAPI 教程, icon: fa-solid fa-bolt, desc: 现代 Python Web 框架，类型校验、依赖注入、自动文档, url: docs/fastapi/ }
     - { name: Node.js 教程, icon: fa-brands fa-node-js, desc: 模块系统、异步编程、核心模块与 Web 开发, url: docs/nodejs/ }
-    - { name: Git 使用教程, icon: fa-brands fa-git-alt, desc: 版本控制，分支、远程协作、历史管理, url: docs/git/ }
+    - { name: Git 使用教程, icon: fa-brands fa-git-alt, desc: 版本控制，分支协作、远程同步与常见问题排查, url: docs/git/ }
     - { name: Groovy 教程, icon: fa-solid fa-cubes, desc: JVM 动态语言，闭包、元编程、Gradle 与 Jenkins, url: docs/groovy/ }
     - { name: Maven 教程, icon: fa-solid fa-box-open, desc: 构建与依赖管理，坐标、生命周期、多模块工程, url: docs/maven/ }
     - { name: Nginx 配置教程, icon: fa-solid fa-server, desc: 核心指令、反向代理、负载均衡、性能与安全, url: docs/nginx/ }

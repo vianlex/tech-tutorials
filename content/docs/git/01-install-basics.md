@@ -170,6 +170,205 @@ git status --ignored
 git check-ignore -v config.json
 ```
 
+## 查看差异 {#diff}
+
+`git diff` 是排查「我到底改了什么」最常用的命令，它有多种用法：
+
+```bash
+# 工作区 vs 暂存区（已修改但未 git add 的内容）
+git diff
+
+# 暂存区 vs 最新提交（已 git add 但未 commit 的内容）
+git diff --staged
+git diff --cached             # 同 --staged
+
+# 工作区 vs 最新提交（工作区的全部未提交改动）
+git diff HEAD
+
+# 两个提交之间的差异
+git diff <commit-a> <commit-b>
+
+# 两个分支的差异（... 三点表示「共同祖先之后」的差异）
+git diff main...feature/login
+
+# 仅查看某个文件的差异
+git diff -- src/app.js
+
+# 仅看文件统计（不改动的行数）
+git diff --stat
+```
+
+实用技巧：
+
+```bash
+# 单词级 diff，适合看一段文本中改了哪个词
+git diff --word-diff
+
+# 忽略空白差异（缩进被改、tab/空格切换时不显示）
+git diff -w
+git diff --ignore-all-space
+
+# 仅显示改动的文件名（用于快速看影响范围）
+git diff --name-only
+
+# 在 diff 中搜索关键词
+git diff -S "TODO"            # 搜索「删除/新增含 TODO 的行」
+git diff -G "function login"  # 搜索「改动触及该模式的行」
+```
+
+## 查看某次提交的内容 {#show}
+
+`git show` 用于查看某个对象（提交、tag、blob）的详细信息：
+
+```bash
+# 查看某次提交的完整信息 + diff
+git show <commit-hash>
+
+# 仅显示提交信息
+git show --stat <commit-hash>
+
+# 仅看该提交的文件名
+git show --name-only <commit-hash>
+
+# 查看某个 tag 指向的内容
+git show v1.0.0
+
+# 查看某个文件的当前内容（HEAD 版本）
+git show HEAD:src/app.js
+```
+
+## 高阶 log 用法 {#log-advanced}
+
+日常排查问题时，`git log` 配合参数非常强大：
+
+```bash
+# 按提交信息搜索
+git log --grep="登录"          # 匹配提交信息中含「登录」
+git log --grep="^fix"          # 正则：fix 开头的提交
+
+# 按代码改动搜索
+git log -S "getUserById"       # 该字符串被增删的所有提交
+git log -G "TODO"              # 改动触及该正则的所有提交
+
+# 按时间/作者/范围筛选
+git log --since="2 weeks ago"
+git log --until="2026-01-01"
+git log --author="alice"
+git log --since="2026-08-01" --until="2026-09-01"
+
+# 自定义输出格式
+git log --pretty=format:"%h %an %s"     # 紧凑格式：hash 作者 主题
+git log --pretty=format:"%h %ad %s" --date=short
+
+# 查看某个文件的所有改动历史（跟随重命名）
+git log --follow -- src/app.js
+
+# 仅看某段时间内的某文件的改动
+git log --since="2026-01-01" -- src/app.js
+
+# 图形化查看分支合并拓扑
+git log --oneline --graph --all --decorate
+```
+
+常用格式占位符：`%h` 短 hash、`%H` 完整 hash、`%an` 作者、`%ae` 邮箱、`%ad` 日期、`%s` 主题、`%b` 正文。
+
+## checkout / restore / switch 三件套 {#restore-checkout-switch}
+
+现代 Git 拆分了原本由 `git checkout` 一肩挑的功能：
+
+| 命令 | 用途 | 等价旧写法 |
+|------|------|-----------|
+| `git switch <branch>` | 切换分支 | `git checkout <branch>` |
+| `git switch -c <new>` | 创建并切换分支 | `git checkout -b <new>` |
+| `git restore <file>` | 丢弃工作区某文件的改动 | `git checkout -- <file>` |
+| `git restore --staged <file>` | 取消暂存（文件回到工作区） | `git reset HEAD <file>` |
+| `git restore --staged --worktree <file>` | 同时恢复工作区与暂存区 | `git checkout HEAD -- <file>` |
+
+> 建议：新写的脚本与教程统一用 `switch` + `restore`，语义最清晰。
+
+## 常用 alias 配置 {#aliases}
+
+把高频命令写成别名能显著提升效率，写入 `~/.gitconfig`：
+
+```ini
+[alias]
+    st = status -sb
+    co = checkout
+    br = branch
+    lg = log --oneline --graph --decorate --all
+    last = log -1 --stat
+    unstage = restore --staged
+    discard = restore
+    amend = commit --amend --no-edit
+    pf = push --force-with-lease
+    aa = add -A
+    cm = commit -m
+    cmn = commit -m
+```
+
+使用：
+
+```bash
+git st           # 等价 git status -sb
+git lg           # 图形化 log
+git unstage .    # 取消全部暂存
+git pf           # 安全强制推送
+```
+
+## 清理未跟踪文件 {#clean}
+
+```bash
+# 预览将被删除的文件（不实际执行）
+git clean -nd
+
+# 删除未跟踪的文件
+git clean -f
+
+# 同时删除未跟踪的目录
+git clean -fd
+
+# 连同被忽略的文件也清理（彻底，常用于重置工作区）
+git clean -fdx
+
+# 与 reset --hard 配合：彻底回到 HEAD 状态
+git reset --hard && git clean -fdx
+```
+
+> `git clean -fdx` 会**永久删除**所有未跟踪 + 被忽略的文件（包括 `.env`、`node_modules/`），执行前务必确认。
+
+## 完整日常流程回顾 {#daily-flow}
+
+把本章命令串成一个最常用的工作日循环：
+
+```bash
+# 1. 起床开始干活：同步最新
+git switch main
+git pull --rebase
+
+# 2. 开新功能
+git switch -c feature/search
+
+# 3. 边写边查
+git status
+git diff
+git add src/search.ts
+git commit -m "feat: 接入搜索接口"
+
+# 4. 推到远端
+git push -u origin feature/search
+
+# 5. 推送前想再改最后一次
+git commit --amend -m "feat: 接入搜索接口（补充错误处理）"
+git push --force-with-lease
+
+# 6. 一阶段干完了，先暂存切去修 bug
+git stash push -m "搜索功能做到一半"
+git switch -c hotfix/empty-list
+# 修完再切回去
+git switch feature/search
+git stash pop
+```
+
 ## 小结 {#summary}
 
 本章覆盖了安装、全局配置、初始化/克隆、核心的 add/commit/status/log 工作流，以及 `.gitignore` 的使用。下一章将学习分支的创建、切换、合并与变基，这是 Git 协作的核心能力。
