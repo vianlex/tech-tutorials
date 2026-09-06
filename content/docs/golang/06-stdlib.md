@@ -2,7 +2,7 @@
 title: 第六章 标准库与工程实践
 linkTitle: 标准库与工程
 description: io.Reader/Writer 哲学、fmt/strings/time、encoding/json 进阶与 Go 1.27 JSON v2 变更、net/http 服务与中间件、os/filepath、slices/maps、测试进阶与 fuzz、模块管理与交叉编译
-weight: 36
+weight: 206
 ---
 
 # 标准库与工程实践

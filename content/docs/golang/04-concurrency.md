@@ -2,7 +2,7 @@
 title: 第四章 并发编程基础
 linkTitle: 并发编程
 description: GMP 调度模型、goroutine、channel 深入、select 惯用法、sync 全家桶、atomic 与数据竞争检测
-weight: 34
+weight: 204
 ---
 
 # 并发编程基础

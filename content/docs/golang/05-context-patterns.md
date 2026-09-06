@@ -2,7 +2,7 @@
 title: 第五章 Context 与并发模式
 linkTitle: Context 与并发模式
 description: context 包详解与传播链、goroutine 生命周期管理、Worker Pool、Fan-in/Fan-out、Pipeline、限流、errgroup 与并发模式最佳实践
-weight: 35
+weight: 205
 ---
 
 # Context 与并发模式

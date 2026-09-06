@@ -2,7 +2,7 @@
 title: 第七章 泛型与反射
 linkTitle: 泛型与反射
 description: 泛型类型参数与约束、泛型函数与类型、Go 1.27 泛型方法、类型推断、反射 Type/Value 与三定律、泛型 vs 反射 vs 接口的选择
-weight: 37
+weight: 207
 ---
 
 # 泛型与反射

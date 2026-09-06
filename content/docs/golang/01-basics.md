@@ -2,7 +2,7 @@
 title: 第一章 环境搭建与基础语法
 linkTitle: 基础语法
 description: Go 安装与环境、变量与零值、基本类型、数组与切片底层、map、字符串、控制流全形态、defer 机制与陷阱
-weight: 31
+weight: 201
 ---
 
 # 环境搭建与基础语法

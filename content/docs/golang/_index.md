@@ -2,7 +2,7 @@
 title: Golang 教程
 linkTitle: Golang 教程
 description: Go 语言从基础语法、并发编程到泛型与反射的完整教程，覆盖开发常用知识点与高频陷阱
-weight: 30
+weight: 200
 ---
 
 # Golang 教程
