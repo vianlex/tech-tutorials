@@ -156,10 +156,10 @@ printPoint(myPoint);   // 合法！因为结构上满足 Point
 
 ```mermaid
 flowchart LR
-    subgraph 名义类型检查
+    subgraph N["名义类型检查"]
         N1["类型 Point"] --> N2["只有显式 implements Point 才兼容"]
     end
-    subgraph 结构化类型检查（TS）
+    subgraph S["结构化类型检查（TS）"]
         S1["需要 {x:number, y:number}"] --> S2["任何结构匹配的对象都兼容"]
         S3["{x,y,label}"] --> S2
     end
