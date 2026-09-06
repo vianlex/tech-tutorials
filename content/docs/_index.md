@@ -35,4 +35,5 @@ weight: 20
 - [awk 使用教程](/docs/awk/)
 - [Linux 常用命令教程](/docs/linux/)
 - [JMeter 压测教程](/docs/jmeter/)
+- [Drools 规则引擎教程](/docs/drools/)
 {{% /cards %}}

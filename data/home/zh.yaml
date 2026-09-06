@@ -17,7 +17,7 @@ hero:
 
 cards:
   eyebrow: 教程目录
-  desc: 从四门核心语言到现代工程工具与 AI 编程助手，共 24 套教程。
+  desc: 从四门核心语言到现代工程工具与 AI 编程助手，共 26 套教程。
   columns: 4
   link_label: 进入教程
   items:
@@ -42,6 +42,7 @@ cards:
     - { name: awk 使用教程, icon: fa-solid fa-filter, desc: 文本处理利器，字段、模式、统计与报表, url: docs/awk/ }
     - { name: Linux 命令教程, icon: fa-brands fa-linux, desc: 文件操作、find、grep、journalctl、mount, url: docs/linux/ }
     - { name: JMeter 压测教程, icon: fa-solid fa-gauge-high, desc: 开源性能测试工具，组件全景、场景设计、关联参数化、指标与实战, url: docs/jmeter/ }
+    - { name: Drools 规则引擎教程, icon: fa-solid fa-brain, desc: Java 生态最成熟的规则引擎，DRL 语法、KIE 容器、Spring Boot 集成与调优, url: docs/drools/ }
     - { name: Pi Agent 教程, icon: fa-solid fa-terminal, desc: 极简终端 AI 编程 Agent，多模型与扩展, url: docs/pi-agent/ }
     - { name: Claude Code 教程, icon: fa-solid fa-wand-magic-sparkles, desc: 官方终端编程助手，CLAUDE.md、MCP、Hooks, url: docs/claude-code/ }
     - { name: OpenCode 教程, icon: fa-solid fa-code, desc: 开源 AI 编程 Agent，终端/桌面/IDE 三形态, url: docs/opencode/ }
