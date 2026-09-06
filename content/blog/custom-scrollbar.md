@@ -58,7 +58,63 @@ tags: [CSS, 前端, 滚动条, UI]
 
 设了非 `visible` 的 `overflow`，这个元素就成为一个「滚动容器」。它的内部是「滚动内容」，超出盒子的部分通过滚动条来查看。浏览器的滚动条本质上就是一个「查看窗口」的控制器——**滚动条的存在，说明这个盒子里还有看不见的内容**。
 
-### 4. 文档级滚动
+### 4. 多个容器嵌套时，滚动条加在哪个容器上
+
+页面里经常是**容器层层嵌套**的：外层是页面主体，中间是布局区，内层才是真正放内容的盒子。这时候滚动条出现在**哪一层**，完全由「**哪个盒子设了 `overflow` 且内容溢出**」决定——**滚动条只会出现在你指定了滚动能力的那个容器上**，而不是统一出现在最外层。
+
+```mermaid
+flowchart TB
+    A["外层：页面主体<br/>（跟随文档滚动，不单独设 overflow）"]
+    B["中间：布局容器 .layout<br/>（overflow: hidden，裁剪但不滚动）"]
+    C["内层：内容区 .content<br/>（overflow: auto → 滚动条出现在这里）"]
+    A --> B --> C
+```
+
+典型需求是「**整页不滚，只有中间的内容区自己滚**」，常见于后台管理、聊天窗口、弹窗等场景。做法很直接：**给内层容器设固定高度 + `overflow: auto`，同时让外层不产生滚动**。
+
+```css
+/* 整页不滚：html/body 高度锁死 */
+html, body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;      /* 关掉文档级滚动 */
+}
+
+/* 布局层：占满视口，但不产生自己的滚动条 */
+.layout {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 内容层：这一层才滚动 */
+.content {
+  flex: 1;               /* 撑满剩余高度 */
+  overflow-y: auto;      /* 滚动条出现在这里 */
+}
+```
+
+几个关键点：
+
+1. **滚动条跟着「设置了 overflow 且内容溢出的那个盒子」走**。上面例子里，`.layout` 虽然 `overflow: hidden`，但它的内容是 `.content`，本身没溢出，所以不滚动；真正滚动的是 `.content`。
+2. **要让内层容器能滚，它必须有确定的高度**（`flex: 1`、固定 `height` 或 `max-height`）。否则内容会把盒子撑高，`overflow` 无从谈起——这是「设了 overflow 却不滚动」的最常见原因。
+3. **每一层都能独立滚动**：如果 `.content` 内部还有一个更小的 `.list` 也设了 `overflow: auto`，那 `.list` 会有**自己的**滚动条，与外层的滚动互不影响，形成「嵌套滚动」。
+
+```css
+/* 嵌套滚动：内层 .list 和外层 .content 各自独立滚动 */
+.content {
+  height: 400px;
+  overflow-y: auto;      /* 外层滚动条 */
+}
+.content .list {
+  height: 200px;
+  overflow-y: auto;      /* 内层还有自己的滚动条 */
+}
+```
+
+> 嵌套滚动时，内层滚到底后，继续滚会触发外层的「滚动链」。如果想让内层滚到底就停住、不带动外层，配合 `overscroll-behavior: contain` 即可（见下文第三节）。
+
+### 5. 文档级滚动
 
 整个页面的滚动是**根元素**（`<html>` / viewport）上的滚动，和普通元素滚动是同一套机制，只是容器换成了视口。可以用 `document.documentElement.scrollTop` 或 `window.scrollY` 读取。
 
