@@ -17,11 +17,12 @@ hero:
 
 cards:
   eyebrow: 教程目录
-  desc: 从四门核心语言到现代工程工具与 AI 编程助手，共 21 套教程。
+  desc: 从四门核心语言到现代工程工具与 AI 编程助手，共 22 套教程。
   columns: 4
   link_label: 进入教程
   items:
     - { name: Spring 教程, icon: fa-brands fa-java, desc: Java 企业级框架，IoC、AOP、Spring Boot、Spring MVC, url: docs/spring/ }
+    - { name: Docker 教程, icon: fa-brands fa-docker, desc: 容器化技术，常用命令、镜像导入导出、网络原理与 Swarm 集群, url: docs/docker/ }
     - { name: CSS 教程, icon: fa-brands fa-css3-alt, desc: 选择器、盒模型、Flex 布局、响应式设计, url: docs/css/ }
     - { name: JavaScript 教程, icon: fa-brands fa-js, desc: 前端核心语言，语法、ES6+、DOM、异步编程, url: docs/javascript/ }
     - { name: React 教程, icon: fa-brands fa-react, desc: 组件化 UI 库，Hooks、组件间通信、React 19 新特性, url: docs/react/ }
