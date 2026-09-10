@@ -121,7 +121,7 @@ dsh --profile headless "读取目录文件，统计所有 py 文件行数"
 2. 小任务起步      先发一句简单任务，确认 key / workspace / 沙箱都正常再上真实工作
 3. 模式选型        日常用标准；多步批量用 PTC；基准测试用极简；开发插件用创造
 4. 凭据备份        ~/.dsh/.credentials.yaml 值得备份，重输 key 是社区最高频的 setup 抱怨
-5. 端口暴露        Web UI 默认只监听 127.0.0.1；需局域网访问才加 --host 0.0.0.0
+5. 端口暴露        Web UI 默认只监听 127.0.0.1，且官方禁止 --host 0.0.0.0（防 RCE 外泄）
 6. 排查装配        dsh --profile web --dump-config 看清真实插件树，比猜更快
 7. 隔离持久化      二次开发用 export DSH_HOME=... 隔离，避免污染默认的 ~/.dsh
 ```
