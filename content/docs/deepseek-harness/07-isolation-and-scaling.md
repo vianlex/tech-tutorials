@@ -71,19 +71,41 @@ iptables -A DSH-U-alice -j RETURN                                      # 非回�
 
 代价是网关无法直接访问实例的回环地址，需要在每个 netns 内放一个极小的回环中继：
 
-```bash
-ip netns add "dsh-$NAME"
+顺序有讲究，四步缺一不可：
 
-# netns 内启动实例（仍只监听 127.0.0.1，符合硬约束）
-ip netns exec "dsh-$NAME" setpriv --reuid="$UID" --regid="$UID" --clear-groups \
+```bash
+NAME=alice
+TARGET_UID=$(id -u "dsh-$NAME")     # 注意：不要用 $UID！它是 bash 只读内置变量，
+                                    # 取的是「执行脚本的人」的 uid，会把实例跑成 root
+RELAY_IP=10.200.0.2                 # netns 内侧地址
+HOST_IP=10.200.0.1                  # 宿主侧地址
+
+# ① 建 netns，并把回环网卡拉起来
+#    新建的 netns 里 lo 默认 DOWN，不 up 的话后面绑定 127.0.0.1 会直接失败
+ip netns add "dsh-$NAME"
+ip netns exec "dsh-$NAME" ip link set lo up
+
+# ② 建 veth pair 打通宿主与 netns（这一步才是 10.200.0.x 的来源）
+ip link add "veth-$NAME" type veth peer name "veth-$NAME-br"
+ip link set "veth-$NAME" netns "dsh-$NAME"
+ip netns exec "dsh-$NAME" ip addr add "$RELAY_IP/30" dev "veth-$NAME"
+ip netns exec "dsh-$NAME" ip link set "veth-$NAME" up
+ip addr add "$HOST_IP/30" dev "veth-$NAME-br"
+ip link set "veth-$NAME-br" up
+
+# ③ netns 内启动实例（仍只监听 127.0.0.1，符合硬约束）
+ip netns exec "dsh-$NAME" setpriv --reuid="$TARGET_UID" --regid="$TARGET_UID" --clear-groups \
   env HOME=/data/users/$NAME DSH_HOME=/data/users/$NAME dsh --profile web --port 3101
 
-# netns 内挂中继：宿主可达的 veth 地址 → 回环端口
+# ④ netns 内挂中继：veth 地址 → 回环端口
 ip netns exec "dsh-$NAME" socat \
-  TCP-LISTEN:13101,fork,reuseaddr,bind=10.200.0.1 TCP:127.0.0.1:3101
+  TCP-LISTEN:13101,fork,reuseaddr,bind="$RELAY_IP" TCP:127.0.0.1:3101
 ```
 
-网关改为连接 `10.200.0.1:13101`，上游 `Host` 仍改写成回环地址。这样做顺带消除了「规则忘记重建」这类人为故障——而这件事容器和 K8s 是免费提供的，这也是它们在规模化场景下的真正价值。
+网关改为连接 `10.200.0.2:13101`（宿主侧经 veth 可达），上游 `Host` 仍改写成回环地址。这样做顺带消除了「规则忘记重建」这类人为故障——而这件事容器和 K8s 是免费提供的，这也是它们在规模化场景下的真正价值。
+
+> [!WARNING]
+> 中继本身是一个**新的攻击面**：它监听在 veth 地址上，netns 内的任何进程（包括用户自己跑的 Agent）都能直连 `10.200.0.2:13101` 而不经过网关的认证。这不要紧——因为它只通向**该用户自己的** 3101 端口，跨租户访问在 netns 边界就已被切断。但不要把 socat 绑到 `0.0.0.0`，否则等于把实例暴露给宿主上的其他 netns。
 
 ## 容器化的两种形态与陷阱 {#docker}
 
@@ -133,7 +155,16 @@ dsh-alice:
 
 ### 三条缩放定律 {#laws}
 
-**定律一：共享运行时的隔离规则是 O(n²)。** 见上一节的数学——1000 人时约 100 万条规则。**所以「每用户共享一个网络命名空间」的任何形态，在千人规模都要否决。**
+**定律一：共享运行时 + 可区分 uid 时，隔离规则必须做成 O(n)；uid 不可区分时，隔离根本无从下手。**
+
+先澄清一处容易误读的地方：**「共享 netns」本身不是死罪**。上一节的 O(n) 子链方案正是为共享 netns 设计的——1000 人只要约 7000 条规则，完全可以接受。真正把形态 D 判死刑的是另一件事：
+
+**形态 D 里所有用户容器共享 netns，而容器内进程的用户身份彼此不可区分。** O(n) 子链完全依赖 `-m owner --uid-owner <uid>` 把包归属到具体用户；一旦大家是同一个 uid（容器默认都以 root 或同一个固定 uid 运行），这条匹配就失效了——规则分不清这个包是 alice 的还是 bob 的。此时只剩两条路：
+
+- 退回 O(n²) 的「枚举别人的端口」写法（1000 人 = 100 万条，上一节已算过，不可用）；
+- 或者干脆不做回环隔离。
+
+**所以准确的表述是：共享 netns 且 uid 可区分（形态 B、C）时，用 O(n) 子链可以撑到千人；共享 netns 且 uid 不可区分（形态 D 的 `network_mode: service:网关` 写法）时，在千人规模必须否决。** 形态 D 想活下来，得放弃共享 netns，改用让每个容器拥有独立 netns 的编排方式（也就是方案 F 的每用户一 Pod）。
 
 **定律二：常驻实例的内存是 O(n)。** dsh 实例是 Node.js Agent 运行时，空载 RSS 约 150~250MB，干活时 400MB~1.5GB：
 
@@ -144,6 +175,10 @@ dsh-alice:
 **定律三：手工账号管理的成本是 O(n)。** 1000 人意味着每天都有入职/离职/忘密码事件，人肉 `userctl add` 必然导致：离职账号长期存活、密码重置变成工单瓶颈、零审计记录。
 
 ### 各方案在每个量级的承载能力 {#matrix}
+
+上一章定义了 A~D 四条基础路线和 E（SSO 叠加层）。到了千人规模还要再引入一条：
+
+> **方案 F：Kubernetes，每用户一 Pod。** 它不在上一章的候选里，是因为 K8s 本身就是一套平台成本——几十人规模用它不划算。但在千人规模它是唯一「每用户独立 netns + 独立 PVC 子路径 + NetworkPolicy 禁互访」三项都天然具备的方案，所以在这里正式登场。
 
 | 方案 | 100 人 | 300 人 | 1000 人 |
 | --- | --- | --- | --- |
@@ -250,7 +285,7 @@ vCPU    ≈ 并发数 ÷ 3（Agent 以 API 等待与 IO 为主，可安全超卖
 | 用户能连上别人的实例端口 | 回环隔离没做，或规则没重建 | 跑隔离脚本；每次增删用户后重跑 |
 | 「Agent 生成了文件但我看不到」 | `HOME` 与 `DSH_HOME` 不一致 | 两者都指向用户私有目录 |
 | 容器重建后用户容器失联 | 共享 netns 的依附关系失效 | 删掉并重建用户容器，不要只 restart |
-| 卷里的文件属主变成 root | 命名卷首次由 root 创建 | 属主自愈逻辑纠正，或手工 `chown -R` |
+| 卷里的文件属主变成 root | 命名卷首次由 root 创建 | 容器启动脚本里加一句 `chown "$TARGET_UID" "$DSH_HOME"` 自愈（实例启动前跑），或手工 `chown -R "$TARGET_UID" /data/users/<name>` |
 | cgroup 配额没生效 | 容器内 `/sys/fs/cgroup` 不可写 | 使用 `cgroup: private` 并挂载可写，否则退化为整容器 `mem_limit` |
 | `iptables` 报权限不足 | 容器缺 `NET_ADMIN` | 加 `cap_add: [NET_ADMIN]`，或明确接受该风险 |
 | 登录一直提示表单过期 | CSRF Cookie 未回传 | 确认 WAF/CDN 不吞 `Set-Cookie`，且访问域名前后一致 |

@@ -1,7 +1,7 @@
 ---
 title: 第六章 多用户部署与密码认证
 linkTitle: 多用户部署与密码认证
-description: 把 dsh 从单机工具变成团队服务：三个安全硬约束、认证与隔离的分层设计、四条部署路线、认证网关实现与每用户独立实例的落地步骤
+description: 把 dsh 从单机工具变成团队服务：四个安全硬约束、认证与隔离的分层设计、四条基础路线加一条 SSO 叠加层、认证网关的核心实现（会话签名、CSRF、上游 Host 改写）与每用户独立实例的落地命令
 weight: 136
 ---
 
@@ -26,9 +26,9 @@ flowchart TD
     F --> I["dsh-carol 端口 3103"]
 ```
 
-## 三个硬约束 {#constraints}
+## 四个硬约束 {#constraints}
 
-任何方案都要先接受这三条事实，否则会在实现到一半时推倒重来。
+任何方案都要先接受这四条事实，否则会在实现到一半时推倒重来。
 
 **约束一：Web UI 只监听回环，且明确拒绝绑定所有网卡。**
 
@@ -44,15 +44,14 @@ it would expose remote code execution to the network; use 127.0.0.1 instead
 
 **约束三：特权接口逐字校验 Host。** `settings` / `credentials` / `agentPreset` 这类接口有 browser-trust fence，且 Host 是**逐字比对**：`myhost` 与 `myhost.example.com` 不是一回事。漏配的典型症状是**页面壳能开，但所有 `/api/*` 返回 403**，会话列表和模型选择永远是空的。
 
+**约束四：必须走 HTTPS。** 只有 HTTPS、`localhost`、`file://` 属于浏览器的安全上下文。用 `http://内网IP:3080` 访问时 Web Crypto 会被禁用，页面直接白屏并报 `crypto.randomUUID is not a function`。临时办法是浏览器 flag 放行，正式方案是配证书（自签也行）。
+
 | 约束 | 应对 |
 | --- | --- |
 | 只监听回环、拒绝 `0.0.0.0` | 前置反向代理，端口永不对外 |
 | 无内置登录 | 认证网关，或前置 SSO |
 | 特权接口校验 Host/Origin | 网关把上游 `Host` 改写成回环地址 + 配好 `trustedHosts` |
-| 必须 HTTPS | 明文 HTTP 下报 `crypto.randomUUID is not a function` |
-
-> [!NOTE]
-> 第四条不是洁癖：只有 HTTPS、`localhost`、`file://` 属于浏览器的安全上下文。用 `http://内网IP:3080` 访问时 Web Crypto 会被禁用。临时办法是浏览器 flag 放行，正式方案是配证书（自签也行）。
+| 必须走 HTTPS | 非安全上下文下 Web Crypto 被禁用，页面白屏 |
 
 ## 认证 ≠ 隔离：五个问题 {#five-questions}
 
@@ -68,7 +67,9 @@ it would expose remote code execution to the network; use 127.0.0.1 instead
 
 **核心结论：第 1 件是认证，第 2~5 件是隔离。隔离边界必须落在操作系统（进程、文件、网络、资源），而不是落在网关代码里的一堆 `if`。网关可能被绕过，内核不会。**
 
-## 四条路线与选型 {#routes}
+## 路线与选型：四条基础 + 一条叠加 {#routes}
+
+**A~D 是互斥的基础路线，选一条；E 是叠加层，可以加在任何一条之上**（所以表格是五行，但真正做选型时只从 A~D 里挑一个）。
 
 | 路线 | 做法 | 认证 | 运行时 | 成本 |
 | --- | --- | --- | --- | --- |
@@ -95,16 +96,20 @@ it would expose remote code execution to the network; use 127.0.0.1 instead
 │    → 路线 A（Caddy/nginx 单密码，10 分钟）
 └─ ≥4 人，或需要区分身份、账单、数据
      │
-     有 Docker 且希望环境可复现吗？
-     ├─ 否 → 路线 B（隔离与配额最强，运维靠 systemd）
-     └─ 是
-          │
-          能接受「整体重启 / 单人跑满影响他人」吗？
-          ├─ 能 → 路线 C（务必补配额 + 回环隔离）
-          └─ 不能 → 路线 D（容器化路线的推荐默认）
+     └─ 有 Docker 且希望环境可复现吗？
+        ├─ 否 → 路线 B（隔离与配额最强，运维靠 systemd）
+        └─ 是
+           │
+           └─ 能接受「整体重启 / 单人跑满影响他人」吗？
+              ├─ 能   → 路线 C（务必补配额 + 回环隔离）
+              └─ 不能 → 路线 D（容器化路线的推荐默认）
+```
 
+这是 A~D 的选型。E 是叠加层，单独判断、与前四项不冲突：
+
+```text
 组织已有统一身份（Keycloak / LDAP / 企业微信）吗？
-└─ 有 → 在任何路线前面叠加路线 E
+└─ 有 → 在 A~D 选出的任何一条前面，再叠加路线 E
 ```
 
 > [!TIP]
@@ -112,11 +117,11 @@ it would expose remote code execution to the network; use 127.0.0.1 instead
 
 ## 认证网关：所有路线共用的那一层 {#gateway}
 
-网关是唯一需要自己写代码的部分，用 Node 标准库约 400 行即可，零依赖。
+网关是唯一需要自己写代码的部分，用 Node 标准库约 400 行即可，零依赖。本章不铺开全部代码，只给出**最关键、也最容易写错的三段**：会话签名、CSRF、上游 Host 改写。剩下的路由转发、登录页渲染、用户表读写按常规 HTTP 服务写法补全即可。
 
 ### 会话：为什么不做服务端会话表
 
-会话 Cookie 的载荷是 `uid.exp.pwdVer`，先 base64url 编码，再用 HMAC-SHA256 签名：
+会话 Cookie 只需 signed 三个字段：`uid`（谁）、`exp`（何时过期）、`pwdVer`（口令版本号）。做法是整段 JSON 先 base64url 编码得到 `<payload>`，再用 HMAC-SHA256 签出 `<mac>`：
 
 ```js
 function sign(uid, exp, pwdVer) {
@@ -126,6 +131,8 @@ function sign(uid, exp, pwdVer) {
 }
 ```
 
+最终 Cookie 的完整形态是 `dsh_sid=eyJ1aWQiOi...（base64url 的 JSON）.cGFj...（HMAC）`——**注意点号分隔的是「载荷」和「签名」这两段，不是 `uid.exp.pwdVer` 三个字段**。验签时先按最后一个点切开，再对左半边重算 HMAC 并用 `timingSafeEqual` 比对。
+
 三个设计点：
 
 1. **改密即踢下线**：改密时把 `pwdVer` 加一，所有旧 Cookie 立刻对不上。不需要服务端会话表，也不需要 Redis。
@@ -134,7 +141,7 @@ function sign(uid, exp, pwdVer) {
 
 ### 口令、防枚举与 CSRF
 
-- 口令用 `scrypt(N=16384, r=8, p=1)` 保存，格式 `scrypt$N$r$p$salt$hash`，比对用 `timingSafeEqual`。
+- 口令用 `scrypt(N=131072, r=8, p=1)` 保存，格式 `scrypt$N$r$p$salt$hash`，比对用 `timingSafeEqual`。参数取 OWASP 首选档：N=2^17 时每 hash 约 128MiB 内存硬度。**不要为了省内存把 N 降到 2^14 却只配 p=1**——OWASP 的最低一档要求 N=2^14 配 p=5，p=1 只在 N=2^17 时才达标，降配后抗 GPU 能力会大幅缩水。
 - **账号不存在时也做一次等价开销的散列**，抹平响应时间差，避免被用来枚举账号。
 - 限流做 **IP 维度 + 账号维度**两套。账号维度锁定可被恶意用来做 DoS，必须配合 IP 限流与强口令。
 - CSRF 用**双提交 Cookie**：登录页下发 `dsh_csrf`，表单带同值隐藏域。**登出只接受 `POST` 且必须带 CSRF**，否则攻击者能构造跨站请求把你登出。
@@ -167,20 +174,36 @@ dsh.example.com {
 ```
 
 ```nginx
-# nginx
-location / {
-    auth_basic           "DeepSeek Harness";
-    auth_basic_user_file /etc/nginx/.htpasswd;
-    proxy_pass http://127.0.0.1:3080;
-    proxy_http_version 1.1;
-    proxy_set_header Host 127.0.0.1:3080;   # 关键：改写 Host，否则特权接口 403
-    proxy_buffering off;                    # 关键：关缓冲，否则流式回答「攒够了才出现」
-    proxy_set_header X-Forwarded-For $remote_addr;
+# 放在 http{} 里，用于区分「普通请求」与「要升级成 WebSocket 的请求」
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      close;
+}
+
+server {
+    location / {
+        auth_basic           "DeepSeek Harness";
+        auth_basic_user_file /etc/nginx/.htpasswd;
+        proxy_pass http://127.0.0.1:3080;
+        proxy_http_version 1.1;
+        proxy_set_header Host 127.0.0.1:3080;   # 关键：改写 Host，否则特权接口 403
+        proxy_buffering off;                    # 关键：关缓冲，否则流式回答「攒够了才出现」
+        proxy_set_header X-Forwarded-For $remote_addr;
+
+        # 关键：dsh 的会话通道是 WebSocket，缺这三行会连不上（表现为会话列表空白）
+        proxy_set_header Upgrade    $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+        proxy_read_timeout 3600s;               # 关键：默认 60s 会掐断空闲的 WS
+    }
 }
 ```
 
 > [!NOTE]
 > `proxy_buffering off` 不能省。开着响应缓冲时，Agent 的流式输出会攒成一大段才出现，看起来像「卡住了」。
+>
+> WebSocket 的三行同样不能省：dsh 用 WebSocket 维持会话通道，而 `Upgrade` 头**不会被 nginx 自动转发**——少了它，页面能打开但会话列表永远是空的，很容易被误判成后端故障。另外默认的 `proxy_read_timeout 60s` 会在 Agent 思考或长任务静默期间掐断连接，必须放宽。
+>
+> Caddy 不需要这些：`reverse_proxy` 原生支持 WebSocket 升级，上面的 Caddyfile 直接可用。
 
 ## 路线 B：每用户独立实例 {#route-b}
 
@@ -194,7 +217,36 @@ nginx/Caddy(443) ──▶ 认证网关 127.0.0.1:3100
  /opt/deepseek-harness/users/<name>  (0700)
 ```
 
-`userctl` 加人时做四件事：建系统账号 → 分配端口（3101 起）→ 写实例环境文件 → 写用户表（`port`/`uid`/`pwdHash`/`pwdVer`/`enabled`）。
+加一个用户要做四件事：建系统账号 → 分配端口（3101 起）→ 写实例环境文件 → 写用户表（`port`/`uid`/`pwdHash`/`pwdVer`/`enabled`）。下面把它封装成 `userctl`（**这个脚本要自己写，dsh 不提供**），下面给出 `userctl add` 的等价命令，照抄即可跑通：
+
+```bash
+# /usr/local/bin/userctl —— add 子命令的核心四步
+NAME="$2"; PORT="$3"          # 用法：userctl add alice 3101
+
+# ① 建系统账号，家目录即私有工作区
+useradd -r -m -d "/opt/deepseek-harness/users/$NAME" -s /sbin/nologin "dsh-$NAME"
+chmod 0700 "/opt/deepseek-harness/users/$NAME"
+
+# ② 写实例环境文件（systemd 模板单元会读它）
+cat > "/opt/deepseek-harness/instances/$NAME.env" <<EOF
+PORT=$PORT
+HOME=/opt/deepseek-harness/users/$NAME
+DSH_HOME=/opt/deepseek-harness/users/$NAME
+DSH_TRUSTED_HOSTS=127.0.0.1,127.0.0.1:$PORT,dsh.example.com
+NODE_OPTIONS=--max-old-space-size=1024
+EOF
+
+# ③ 写用户表（网关按 mtime 缓存，改完立即生效）
+#    {"alice":{"port":3101,"uid":"dsh-alice","pwdHash":"scrypt$...","pwdVer":1,"enabled":true}}
+userctl-set-user "$NAME" "$PORT" "$(id -u "dsh-$NAME")"
+
+# ④ 起实例
+systemctl enable --now "dsh-user@$NAME"
+systemctl is-active "dsh-user@$NAME"      # 应输出 active
+```
+
+> [!IMPORTANT]
+> **第 ④ 步之后还要重跑一次回环隔离规则**（见下一章），否则新用户会带着未受保护的端口上线。这是「加人」最容易被漏掉的第五步——`userctl` 的最佳实践是把隔离脚本的调用也内置进去，避免靠人记。
 
 ```ini
 # /etc/systemd/system/dsh-user@.service

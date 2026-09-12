@@ -16,5 +16,5 @@ DeepSeek Harness（简称 **dsh**）是 DeepSeek 开源的 Agent 框架，核心
 - [第三章：核心概念](/docs/deepseek-harness/03-core-concepts/) — plugin/profile/bundle/patch、配置层叠顺序、--dump-config 与 DSH_HOME
 - [第四章：插件开发入门](/docs/deepseek-harness/04-plugin-dev/) — apply(ctx)/inject/ctx.effect、三种写法、defineTool 工具与加载三步闭环
 - [第五章：进阶与最佳实践](/docs/deepseek-harness/05-advanced/) — PTC 模式、Python SDK、自定义 agent preset、headless 批处理与实践建议
-- [第六章：多用户部署与密码认证](/docs/deepseek-harness/06-multiuser-deploy/) — 三个安全硬约束、认证与隔离的分层设计、四条部署路线、认证网关实现、每用户独立实例的落地步骤
+- [第六章：多用户部署与密码认证](/docs/deepseek-harness/06-multiuser-deploy/) — 四个安全硬约束、认证与隔离的分层设计、四条基础路线加一条 SSO 叠加层、认证网关核心实现与每用户独立实例的落地命令
 - [第七章：租户隔离与规模化加固](/docs/deepseek-harness/07-isolation-and-scaling/) — 回环租户隔离的陷阱与 O(n) 实现、容器化两种形态的坑、千用户规模选型与容量规划、按需启停策略
